@@ -8,6 +8,8 @@ const apiKey = process.env.OPENAI_API_KEY;
 const ALLOWED_SIZES = new Set(["1024x1024", "1024x1536", "1536x1024"]);
 const ALLOWED_QUALITIES = new Set(["low", "medium", "high"]);
 const ALLOWED_OUTPUT_FORMATS = new Set(["jpeg", "png"]);
+const ALLOWED_SOURCE_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
+const MAX_REFERENCE_IMAGES = 4;
 
 if (!apiKey) {
   console.error("Missing OPENAI_API_KEY. Copy .env.example to .env and set your key.");
@@ -16,7 +18,8 @@ if (!apiKey) {
 
 const openai = new OpenAI({ apiKey });
 
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "30mb" }));
+app.use("/images", express.static("images"));
 
 function formatOpenAIError(error, fallbackMessage) {
   const status = error?.status;
@@ -51,13 +54,54 @@ function formatOpenAIError(error, fallbackMessage) {
   return text;
 }
 
+function createImageFileFromBase64(imageB64, mimeType, fileStem) {
+  if (typeof imageB64 !== "string" || !imageB64.trim()) {
+    throw new Error("Missing source image data.");
+  }
+  if (!ALLOWED_SOURCE_MIME_TYPES.has(mimeType)) {
+    throw new Error("Unsupported source image type. Use PNG or JPEG.");
+  }
+
+  const imageBuffer = Buffer.from(imageB64, "base64");
+  if (!imageBuffer.length) {
+    throw new Error("Invalid source image data.");
+  }
+
+  const extension = mimeType === "image/jpeg" ? "jpg" : "png";
+  return new File([imageBuffer], fileStem + "." + extension, { type: mimeType });
+}
+
+function parseReferenceImageFiles(referenceImages) {
+  if (referenceImages === undefined || referenceImages === null) {
+    return [];
+  }
+  if (!Array.isArray(referenceImages)) {
+    throw new Error("reference_images must be an array.");
+  }
+  if (referenceImages.length > MAX_REFERENCE_IMAGES) {
+    throw new Error("You can upload up to " + MAX_REFERENCE_IMAGES + " reference images.");
+  }
+
+  return referenceImages.map((item, index) => {
+    if (!item || typeof item !== "object") {
+      throw new Error("Each reference image must be an object.");
+    }
+
+    const mimeType = item.mime_type;
+    const b64 = item.b64;
+    const rawName = typeof item.name === "string" ? item.name.trim() : "";
+    const safeStem = (rawName || "reference-" + (index + 1)).replace(/[^a-zA-Z0-9._-]/g, "_");
+    return createImageFileFromBase64(b64, mimeType, safeStem);
+  });
+}
+
 app.get("/", (_req, res) => {
   res.type("html").send(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Story Image Generator + Edit</title>
+  <title>mini dall-e</title>
   <style>
     :root {
       --bg: #f7f4ed;
@@ -93,6 +137,34 @@ app.get("/", (_req, res) => {
       margin: 0 0 8px;
       font-size: clamp(22px, 4vw, 32px);
       line-height: 1.1;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    .logo {
+      width: 86px;
+      height: 86px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      display: block;
+      background: radial-gradient(circle at 25% 20%, #fff5e6 0%, #f1e2cf 58%, #e3d2bc 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .logo svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
     h2 {
       margin: 16px 0 8px;
@@ -139,6 +211,11 @@ app.get("/", (_req, res) => {
       background: var(--accent);
       color: var(--accent-ink);
       cursor: pointer;
+    }
+    button.secondary {
+      border-color: var(--border);
+      background: #fff;
+      color: var(--ink);
     }
     button:disabled {
       opacity: 0.6;
@@ -198,21 +275,30 @@ app.get("/", (_req, res) => {
       font-size: 13px;
       margin-top: 6px;
     }
+    .upload-input {
+      max-width: 300px;
+      background: #fff;
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
-    <h1>Story Image Generator</h1>
-    <p>Create a base image, then keep editing it with change prompts.</p>
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <img src="/images/goblin-profile-right.png" alt="mini dall-e logo" />
+      </div>
+      <h1>mini dall-e</h1>
+    </div>
+    <p>Create images from prompts, then iterate with edits and optional reference images.</p>
 
     <h2>1) Generate New Image</h2>
-    <textarea id="prompt" placeholder="Example: Children's storybook watercolor illustration of a small fox reading under a lantern in a snowy forest."></textarea>
-
-    <div id="editSection" style="display:none">
-      <h2>2) Edit Selected Image</h2>
-      <textarea id="editPrompt" placeholder="Example: Make it sunset, add glowing fireflies, keep the same fox character."></textarea>
+    <textarea id="prompt" placeholder="Example: cinematic product shot of a matte black coffee grinder on a marble counter, warm morning sunlight."></textarea>
+    <div class="row">
+      <label for="referenceImages">Reference images (optional):</label>
+      <input id="referenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+      <button id="clearReferences" class="secondary" type="button">Clear references</button>
     </div>
-
+    <div class="hint" id="referenceSummary">No reference images selected.</div>
     <div class="row">
       <label for="size">Size:</label>
       <select id="size">
@@ -234,8 +320,21 @@ app.get("/", (_req, res) => {
       <label for="compression">Compression:</label>
       <input id="compression" type="number" min="0" max="100" step="1" value="80" />
       <button id="generate" type="button">Generate New</button>
-      <button id="edit" type="button" style="display:none">Edit Selected</button>
-      <a id="download" class="download" href="#" download="story-image.png">Download</a>
+    </div>
+
+    <div id="editSection" style="display:none">
+      <h2>2) Edit Selected Image</h2>
+      <textarea id="editPrompt" placeholder="Example: shift to golden hour lighting, add subtle dust particles, keep composition and subject."></textarea>
+      <div class="row">
+        <label for="editReferenceImages">Edit reference images (optional):</label>
+        <input id="editReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+        <button id="clearEditReferences" class="secondary" type="button">Clear edit references</button>
+      </div>
+      <div class="hint" id="editReferenceSummary">No edit reference images selected.</div>
+      <div class="row">
+        <button id="edit" type="button" style="display:none">Edit Selected</button>
+        <a id="download" class="download" href="#" download="mini-dalle-image.png">Download</a>
+      </div>
     </div>
 
     <div class="status" id="status"></div>
@@ -258,14 +357,23 @@ app.get("/", (_req, res) => {
       const compressionEl = document.getElementById("compression");
       const generateBtn = document.getElementById("generate");
       const editBtn = document.getElementById("edit");
+      const referenceImagesInputEl = document.getElementById("referenceImages");
+      const clearReferencesBtn = document.getElementById("clearReferences");
+      const referenceSummaryEl = document.getElementById("referenceSummary");
+      const editReferenceImagesInputEl = document.getElementById("editReferenceImages");
+      const clearEditReferencesBtn = document.getElementById("clearEditReferences");
+      const editReferenceSummaryEl = document.getElementById("editReferenceSummary");
       const statusEl = document.getElementById("status");
     const previewEl = document.getElementById("preview");
     const downloadEl = document.getElementById("download");
     const historyEl = document.getElementById("history");
 
     const imageHistory = [];
+    const allowedSourceMimeTypes = new Set(["image/jpeg", "image/png"]);
+    let referenceImages = [];
+    let editReferenceImages = [];
     let selectedId = null;
-    const SETTINGS_STORAGE_KEY = "story-image-generator-settings-v1";
+    const SETTINGS_STORAGE_KEY = "mini-dalle-settings-v1";
 
     function setButtons(disabled) {
       generateBtn.disabled = disabled;
@@ -345,6 +453,95 @@ app.get("/", (_req, res) => {
       return "bin";
     }
 
+    function renderReferenceSummary() {
+      if (!referenceImages.length) {
+        referenceSummaryEl.textContent = "No reference images selected.";
+        return;
+      }
+
+      const names = referenceImages.map((file) => file.name).join(", ");
+      referenceSummaryEl.textContent = "Using " + referenceImages.length + " reference image(s): " + names;
+    }
+
+    function renderEditReferenceSummary() {
+      if (!editReferenceImages.length) {
+        editReferenceSummaryEl.textContent = "No edit reference images selected.";
+        return;
+      }
+
+      const names = editReferenceImages.map((file) => file.name).join(", ");
+      editReferenceSummaryEl.textContent = "Using " + editReferenceImages.length + " edit reference image(s): " + names;
+    }
+
+    function readFileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || "");
+          const commaIndex = dataUrl.indexOf(",");
+          resolve(commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl);
+        };
+        reader.onerror = () => reject(new Error("Failed to read " + file.name));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function updateReferenceImagesFromInput() {
+      const files = Array.from(referenceImagesInputEl.files || []);
+      if (files.length > 4) {
+        referenceImages = [];
+        referenceImagesInputEl.value = "";
+        renderReferenceSummary();
+        throw new Error("You can upload up to 4 reference images.");
+      }
+
+      const next = [];
+      for (const file of files) {
+        if (!allowedSourceMimeTypes.has(file.type)) {
+          referenceImages = [];
+          referenceImagesInputEl.value = "";
+          renderReferenceSummary();
+          throw new Error("Unsupported file type for " + file.name + ". Use PNG or JPEG.");
+        }
+        next.push({
+          name: file.name,
+          mime_type: file.type,
+          b64: await readFileAsBase64(file)
+        });
+      }
+
+      referenceImages = next;
+      renderReferenceSummary();
+    }
+
+    async function updateEditReferenceImagesFromInput() {
+      const files = Array.from(editReferenceImagesInputEl.files || []);
+      if (files.length > 4) {
+        editReferenceImages = [];
+        editReferenceImagesInputEl.value = "";
+        renderEditReferenceSummary();
+        throw new Error("You can upload up to 4 edit reference images.");
+      }
+
+      const next = [];
+      for (const file of files) {
+        if (!allowedSourceMimeTypes.has(file.type)) {
+          editReferenceImages = [];
+          editReferenceImagesInputEl.value = "";
+          renderEditReferenceSummary();
+          throw new Error("Unsupported file type for " + file.name + ". Use PNG or JPEG.");
+        }
+        next.push({
+          name: file.name,
+          mime_type: file.type,
+          b64: await readFileAsBase64(file)
+        });
+      }
+
+      editReferenceImages = next;
+      renderEditReferenceSummary();
+    }
+
     function selectImage(id) {
       selectedId = id;
       const item = imageHistory.find((entry) => entry.id === id);
@@ -356,7 +553,7 @@ app.get("/", (_req, res) => {
       previewEl.src = imageDataUrl;
       previewEl.style.display = "block";
       downloadEl.href = imageDataUrl;
-      downloadEl.download = "story-image." + getFileExtensionFromMimeType(mimeType);
+      downloadEl.download = "mini-dalle-image." + getFileExtensionFromMimeType(mimeType);
       downloadEl.style.display = "inline-block";
 
       for (const thumb of historyEl.querySelectorAll(".thumb")) {
@@ -415,7 +612,12 @@ app.get("/", (_req, res) => {
       statusEl.textContent = "Generating image...";
 
       try {
-        const data = await postJSON("/generate", { prompt, ...settings });
+        const payload = { prompt, ...settings };
+        if (referenceImages.length) {
+          payload.reference_images = referenceImages;
+        }
+
+        const data = await postJSON("/generate", payload);
         addToHistory({ b64: data.b64, mimeType: data.mime_type, originPrompt: prompt, parentId: null });
         statusEl.textContent = "Done.";
       } catch (error) {
@@ -448,12 +650,17 @@ app.get("/", (_req, res) => {
       statusEl.textContent = "Editing image...";
 
       try {
-        const data = await postJSON("/edit", {
+        const payload = {
           prompt,
           ...settings,
           image_b64: base.b64,
           image_mime_type: base.mimeType || "image/png"
-        });
+        };
+        if (editReferenceImages.length) {
+          payload.reference_images = editReferenceImages;
+        }
+
+        const data = await postJSON("/edit", payload);
         addToHistory({ b64: data.b64, mimeType: data.mime_type, originPrompt: prompt, parentId: base.id });
         statusEl.textContent = "Edit complete.";
       } catch (error) {
@@ -469,7 +676,33 @@ app.get("/", (_req, res) => {
     qualityEl.addEventListener("change", saveSettings);
     formatEl.addEventListener("change", saveSettings);
     compressionEl.addEventListener("change", saveSettings);
+    referenceImagesInputEl.addEventListener("change", async () => {
+      try {
+        await updateReferenceImagesFromInput();
+      } catch (error) {
+        statusEl.textContent = "Error: " + (error?.message || "Invalid reference image");
+      }
+    });
+    clearReferencesBtn.addEventListener("click", () => {
+      referenceImages = [];
+      referenceImagesInputEl.value = "";
+      renderReferenceSummary();
+    });
+    editReferenceImagesInputEl.addEventListener("change", async () => {
+      try {
+        await updateEditReferenceImagesFromInput();
+      } catch (error) {
+        statusEl.textContent = "Error: " + (error?.message || "Invalid edit reference image");
+      }
+    });
+    clearEditReferencesBtn.addEventListener("click", () => {
+      editReferenceImages = [];
+      editReferenceImagesInputEl.value = "";
+      renderEditReferenceSummary();
+    });
     loadSettings();
+    renderReferenceSummary();
+    renderEditReferenceSummary();
     setEditUIVisible(false);
   </script>
 </body>
@@ -478,7 +711,7 @@ app.get("/", (_req, res) => {
 
 app.post("/generate", async (req, res) => {
   try {
-    const { prompt, size, quality, output_format, output_compression } = req.body || {};
+    const { prompt, size, quality, output_format, output_compression, reference_images } = req.body || {};
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Missing prompt" });
     }
@@ -496,18 +729,40 @@ app.post("/generate", async (req, res) => {
       return res.status(400).json({ error: "Compression must be an integer from 0 to 100." });
     }
 
-    const generatePayload = {
-      model: "gpt-image-1",
-      prompt,
-      size,
-      quality,
-      output_format
-    };
-    if (output_format === "jpeg") {
-      generatePayload.output_compression = output_compression;
+    let referenceImageFiles;
+    try {
+      referenceImageFiles = parseReferenceImageFiles(reference_images);
+    } catch (validationError) {
+      return res.status(400).json({ error: validationError.message || "Invalid reference_images payload" });
     }
 
-    const result = await openai.images.generate(generatePayload);
+    let result;
+    if (referenceImageFiles.length) {
+      const editPayload = {
+        model: "gpt-image-1",
+        prompt,
+        image: referenceImageFiles.length === 1 ? referenceImageFiles[0] : referenceImageFiles,
+        size,
+        quality,
+        output_format
+      };
+      if (output_format === "jpeg") {
+        editPayload.output_compression = output_compression;
+      }
+      result = await openai.images.edit(editPayload);
+    } else {
+      const generatePayload = {
+        model: "gpt-image-1",
+        prompt,
+        size,
+        quality,
+        output_format
+      };
+      if (output_format === "jpeg") {
+        generatePayload.output_compression = output_compression;
+      }
+      result = await openai.images.generate(generatePayload);
+    }
 
     const b64 = result.data?.[0]?.b64_json;
     if (!b64) {
@@ -525,7 +780,7 @@ app.post("/generate", async (req, res) => {
 
 app.post("/edit", async (req, res) => {
   try {
-    const { prompt, size, quality, output_format, output_compression, image_b64, image_mime_type } = req.body || {};
+    const { prompt, size, quality, output_format, output_compression, image_b64, image_mime_type, reference_images } = req.body || {};
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Missing prompt" });
     }
@@ -546,15 +801,25 @@ app.post("/edit", async (req, res) => {
       return res.status(400).json({ error: "Compression must be an integer from 0 to 100." });
     }
 
-    const imageBuffer = Buffer.from(image_b64, "base64");
-    const sourceMimeType = image_mime_type === "image/jpeg" ? "image/jpeg" : "image/png";
-    const sourceExt = sourceMimeType === "image/jpeg" ? "jpg" : "png";
-    const imageFile = new File([imageBuffer], "source." + sourceExt, { type: sourceMimeType });
+    let imageFile;
+    try {
+      const sourceMimeType = image_mime_type || "image/png";
+      imageFile = createImageFileFromBase64(image_b64, sourceMimeType, "source");
+    } catch (validationError) {
+      return res.status(400).json({ error: validationError.message || "Invalid source image payload" });
+    }
+
+    let referenceImageFiles;
+    try {
+      referenceImageFiles = parseReferenceImageFiles(reference_images);
+    } catch (validationError) {
+      return res.status(400).json({ error: validationError.message || "Invalid reference_images payload" });
+    }
 
     const editPayload = {
       model: "gpt-image-1",
       prompt,
-      image: imageFile,
+      image: referenceImageFiles.length ? [imageFile, ...referenceImageFiles] : imageFile,
       size,
       quality,
       output_format

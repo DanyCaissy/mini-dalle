@@ -1,7 +1,9 @@
-# Story Image Generator (Local App)
+# mini dall-e (Local App)
 
 This app runs on your computer and lets you:
 - create images from text
+- include optional reference images as context for generation
+- include separate optional reference images as context for editing
 - edit the selected image with another prompt
 - download the result
 
@@ -59,10 +61,12 @@ Keep that terminal window open while using the app.
 1. Start app: `npm run dev`
 2. Open browser: `http://localhost:3000`
 3. Choose size/quality/format/compression (these are saved automatically and restored after reload)
-4. Type a prompt and click **Generate New**
-5. After first image appears, the edit section appears automatically
-6. Type edit prompt and click **Edit Selected**
-7. Click **Download** to save current image
+4. (Optional) Upload up to 4 reference images (PNG or JPEG) to guide generation
+5. Type a prompt and click **Generate New**
+6. After first image appears, the edit section appears automatically
+7. (Optional) Upload edit-specific reference images (separate from generation references)
+8. Type edit prompt and click **Edit Selected**
+9. Click **Download** to save current image
 
 ## Size limits
 
