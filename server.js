@@ -5,6 +5,9 @@ import OpenAI from "openai";
 const app = express();
 const port = Number(process.env.PORT || 3000);
 const apiKey = process.env.OPENAI_API_KEY;
+const ALLOWED_SIZES = new Set(["1024x1024", "1024x1536", "1536x1024"]);
+const ALLOWED_QUALITIES = new Set(["low", "medium", "high"]);
+const ALLOWED_OUTPUT_FORMATS = new Set(["jpeg", "png"]);
 
 if (!apiKey) {
   console.error("Missing OPENAI_API_KEY. Copy .env.example to .env and set your key.");
@@ -14,6 +17,39 @@ if (!apiKey) {
 const openai = new OpenAI({ apiKey });
 
 app.use(express.json({ limit: "10mb" }));
+
+function formatOpenAIError(error, fallbackMessage) {
+  const status = error?.status;
+  const requestId =
+    error?.request_id ||
+    error?.headers?.["x-request-id"] ||
+    error?.response?.headers?.["x-request-id"] ||
+    null;
+  const apiMessage = error?.error?.message || error?.message || fallbackMessage;
+  const combined = [];
+
+  if (status) {
+    combined.push("HTTP " + status + ".");
+  }
+  combined.push(apiMessage);
+
+  if (requestId) {
+    combined.push("Request ID: " + requestId + ".");
+  }
+
+  const text = combined.join(" ");
+  const lower = text.toLowerCase();
+  const looksLikeSafetyBlock =
+    lower.includes("rejected by the safety system") ||
+    lower.includes("safety") ||
+    lower.includes("policy violation");
+
+  if (looksLikeSafetyBlock) {
+    return text + " If this prompt is benign, retry once with simpler wording. If it repeats, share the Request ID with OpenAI support.";
+  }
+
+  return text;
+}
 
 app.get("/", (_req, res) => {
   res.type("html").send(`<!doctype html>
@@ -89,13 +125,15 @@ app.get("/", (_req, res) => {
       font-size: 14px;
       color: var(--muted);
     }
-    select, button, .download {
+    select, input, button, .download {
       border-radius: 10px;
       border: 1px solid var(--border);
       padding: 10px 12px;
       font-size: 15px;
       font-family: inherit;
     }
+    select, input { background: #fff; color: var(--ink); }
+    input[type="number"] { width: 90px; }
     button {
       border-color: var(--accent);
       background: var(--accent);
@@ -170,8 +208,10 @@ app.get("/", (_req, res) => {
     <h2>1) Generate New Image</h2>
     <textarea id="prompt" placeholder="Example: Children's storybook watercolor illustration of a small fox reading under a lantern in a snowy forest."></textarea>
 
-    <h2>2) Edit Selected Image</h2>
-    <textarea id="editPrompt" placeholder="Example: Make it sunset, add glowing fireflies, keep the same fox character."></textarea>
+    <div id="editSection" style="display:none">
+      <h2>2) Edit Selected Image</h2>
+      <textarea id="editPrompt" placeholder="Example: Make it sunset, add glowing fireflies, keep the same fox character."></textarea>
+    </div>
 
     <div class="row">
       <label for="size">Size:</label>
@@ -180,12 +220,27 @@ app.get("/", (_req, res) => {
         <option value="1024x1536">1024x1536 (portrait)</option>
         <option value="1536x1024">1536x1024 (landscape)</option>
       </select>
+      <label for="quality">Quality:</label>
+      <select id="quality">
+        <option value="low">Low (faster)</option>
+        <option value="medium">Medium</option>
+        <option value="high">High (slower)</option>
+      </select>
+      <label for="format">Format:</label>
+      <select id="format">
+        <option value="jpeg">JPEG (smaller/faster)</option>
+        <option value="png">PNG (larger)</option>
+      </select>
+      <label for="compression">Compression:</label>
+      <input id="compression" type="number" min="0" max="100" step="1" value="80" />
       <button id="generate" type="button">Generate New</button>
-      <button id="edit" type="button">Edit Selected</button>
+      <button id="edit" type="button" style="display:none">Edit Selected</button>
       <a id="download" class="download" href="#" download="story-image.png">Download</a>
     </div>
 
     <div class="status" id="status"></div>
+    <div class="hint">Supported sizes: 1024x1024, 1024x1536, 1536x1024.</div>
+    <div class="hint">Compression applies to JPEG only. Your size/quality/format/compression selections are saved automatically.</div>
     <div class="canvas">
       <img id="preview" alt="Generated image preview" />
     </div>
@@ -193,23 +248,101 @@ app.get("/", (_req, res) => {
     <div class="history" id="history"></div>
   </main>
 
-  <script>
-    const promptEl = document.getElementById("prompt");
-    const editPromptEl = document.getElementById("editPrompt");
-    const sizeEl = document.getElementById("size");
-    const generateBtn = document.getElementById("generate");
-    const editBtn = document.getElementById("edit");
-    const statusEl = document.getElementById("status");
+    <script>
+      const promptEl = document.getElementById("prompt");
+      const editPromptEl = document.getElementById("editPrompt");
+      const editSectionEl = document.getElementById("editSection");
+      const sizeEl = document.getElementById("size");
+      const qualityEl = document.getElementById("quality");
+      const formatEl = document.getElementById("format");
+      const compressionEl = document.getElementById("compression");
+      const generateBtn = document.getElementById("generate");
+      const editBtn = document.getElementById("edit");
+      const statusEl = document.getElementById("status");
     const previewEl = document.getElementById("preview");
     const downloadEl = document.getElementById("download");
     const historyEl = document.getElementById("history");
 
     const imageHistory = [];
     let selectedId = null;
+    const SETTINGS_STORAGE_KEY = "story-image-generator-settings-v1";
 
     function setButtons(disabled) {
       generateBtn.disabled = disabled;
       editBtn.disabled = disabled;
+    }
+
+    function setEditUIVisible(visible) {
+      editSectionEl.style.display = visible ? "block" : "none";
+      editBtn.style.display = visible ? "inline-block" : "none";
+    }
+
+    function getSelectedSize() {
+      const size = sizeEl.value;
+      const allowed = new Set(["1024x1024", "1024x1536", "1536x1024"]);
+      if (!allowed.has(size)) {
+        return { size: null, error: "Unsupported size. Use 1024x1024, 1024x1536, or 1536x1024." };
+      }
+      return { size, error: null };
+    }
+
+    function saveSettings() {
+      const payload = {
+        size: sizeEl.value,
+        quality: qualityEl.value,
+        output_format: formatEl.value,
+        output_compression: compressionEl.value
+      };
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+    }
+
+    function loadSettings() {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.size === "string") sizeEl.value = parsed.size;
+        if (typeof parsed.quality === "string") qualityEl.value = parsed.quality;
+        if (typeof parsed.output_format === "string") formatEl.value = parsed.output_format;
+        if (parsed.output_compression !== undefined && parsed.output_compression !== null) {
+          compressionEl.value = String(parsed.output_compression);
+        }
+      } catch (_error) {
+        localStorage.removeItem(SETTINGS_STORAGE_KEY);
+      }
+    }
+
+    function getSelectedRenderSettings() {
+      const { size, error: sizeError } = getSelectedSize();
+      if (!size) {
+        return { settings: null, error: sizeError };
+      }
+      const quality = qualityEl.value;
+      const output_format = formatEl.value;
+      const output_compression = Number.parseInt(compressionEl.value, 10);
+      const allowedQualities = new Set(["low", "medium", "high"]);
+      const allowedFormats = new Set(["jpeg", "png"]);
+
+      if (!allowedQualities.has(quality)) {
+        return { settings: null, error: "Unsupported quality. Use low, medium, or high." };
+      }
+      if (!allowedFormats.has(output_format)) {
+        return { settings: null, error: "Unsupported format. Use jpeg or png." };
+      }
+      if (!Number.isInteger(output_compression) || output_compression < 0 || output_compression > 100) {
+        return { settings: null, error: "Compression must be an integer from 0 to 100." };
+      }
+
+      return {
+        settings: { size, quality, output_format, output_compression },
+        error: null
+      };
+    }
+
+    function getFileExtensionFromMimeType(mimeType) {
+      if (mimeType === "image/jpeg") return "jpg";
+      if (mimeType === "image/png") return "png";
+      return "bin";
     }
 
     function selectImage(id) {
@@ -217,10 +350,13 @@ app.get("/", (_req, res) => {
       const item = imageHistory.find((entry) => entry.id === id);
       if (!item) return;
 
-      const imageDataUrl = "data:image/png;base64," + item.b64;
+      setEditUIVisible(true);
+      const mimeType = item.mimeType || "image/png";
+      const imageDataUrl = "data:" + mimeType + ";base64," + item.b64;
       previewEl.src = imageDataUrl;
       previewEl.style.display = "block";
       downloadEl.href = imageDataUrl;
+      downloadEl.download = "story-image." + getFileExtensionFromMimeType(mimeType);
       downloadEl.style.display = "inline-block";
 
       for (const thumb of historyEl.querySelectorAll(".thumb")) {
@@ -228,9 +364,9 @@ app.get("/", (_req, res) => {
       }
     }
 
-    function addToHistory({ b64, originPrompt, parentId }) {
+    function addToHistory({ b64, mimeType, originPrompt, parentId }) {
       const id = Date.now() + Math.floor(Math.random() * 100000);
-      imageHistory.unshift({ id, b64, originPrompt, parentId });
+      imageHistory.unshift({ id, b64, mimeType, originPrompt, parentId });
 
       const button = document.createElement("button");
       button.type = "button";
@@ -240,7 +376,7 @@ app.get("/", (_req, res) => {
 
       const img = document.createElement("img");
       img.alt = "Generated thumbnail";
-      img.src = "data:image/png;base64," + b64;
+      img.src = "data:" + (mimeType || "image/png") + ";base64," + b64;
       button.appendChild(img);
 
       button.addEventListener("click", () => selectImage(id));
@@ -263,19 +399,24 @@ app.get("/", (_req, res) => {
 
     async function generateImage() {
       const prompt = promptEl.value.trim();
-      const size = sizeEl.value;
+      const { settings, error } = getSelectedRenderSettings();
 
       if (!prompt) {
         statusEl.textContent = "Please enter a base prompt.";
         return;
       }
+      if (!settings) {
+        statusEl.textContent = error;
+        return;
+      }
 
+      saveSettings();
       setButtons(true);
       statusEl.textContent = "Generating image...";
 
       try {
-        const data = await postJSON("/generate", { prompt, size });
-        addToHistory({ b64: data.b64, originPrompt: prompt, parentId: null });
+        const data = await postJSON("/generate", { prompt, ...settings });
+        addToHistory({ b64: data.b64, mimeType: data.mime_type, originPrompt: prompt, parentId: null });
         statusEl.textContent = "Done.";
       } catch (error) {
         statusEl.textContent = "Error: " + (error?.message || "Unknown error");
@@ -286,11 +427,15 @@ app.get("/", (_req, res) => {
 
     async function editImage() {
       const prompt = editPromptEl.value.trim();
-      const size = sizeEl.value;
+      const { settings, error } = getSelectedRenderSettings();
       const base = imageHistory.find((entry) => entry.id === selectedId);
 
       if (!base) {
         statusEl.textContent = "Generate an image first, then select one to edit.";
+        return;
+      }
+      if (!settings) {
+        statusEl.textContent = error;
         return;
       }
       if (!prompt) {
@@ -298,16 +443,18 @@ app.get("/", (_req, res) => {
         return;
       }
 
+      saveSettings();
       setButtons(true);
       statusEl.textContent = "Editing image...";
 
       try {
         const data = await postJSON("/edit", {
           prompt,
-          size,
-          image_b64: base.b64
+          ...settings,
+          image_b64: base.b64,
+          image_mime_type: base.mimeType || "image/png"
         });
-        addToHistory({ b64: data.b64, originPrompt: prompt, parentId: base.id });
+        addToHistory({ b64: data.b64, mimeType: data.mime_type, originPrompt: prompt, parentId: base.id });
         statusEl.textContent = "Edit complete.";
       } catch (error) {
         statusEl.textContent = "Error: " + (error?.message || "Unknown error");
@@ -318,6 +465,12 @@ app.get("/", (_req, res) => {
 
     generateBtn.addEventListener("click", generateImage);
     editBtn.addEventListener("click", editImage);
+    sizeEl.addEventListener("change", saveSettings);
+    qualityEl.addEventListener("change", saveSettings);
+    formatEl.addEventListener("change", saveSettings);
+    compressionEl.addEventListener("change", saveSettings);
+    loadSettings();
+    setEditUIVisible(false);
   </script>
 </body>
 </html>`);
@@ -325,32 +478,54 @@ app.get("/", (_req, res) => {
 
 app.post("/generate", async (req, res) => {
   try {
-    const { prompt, size } = req.body || {};
+    const { prompt, size, quality, output_format, output_compression } = req.body || {};
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Missing prompt" });
     }
 
-    const result = await openai.images.generate({
+    if (!ALLOWED_SIZES.has(size)) {
+      return res.status(400).json({ error: "Unsupported size. Use 1024x1024, 1024x1536, or 1536x1024." });
+    }
+    if (!ALLOWED_QUALITIES.has(quality)) {
+      return res.status(400).json({ error: "Unsupported quality. Use low, medium, or high." });
+    }
+    if (!ALLOWED_OUTPUT_FORMATS.has(output_format)) {
+      return res.status(400).json({ error: "Unsupported format. Use jpeg or png." });
+    }
+    if (output_format === "jpeg" && (!Number.isInteger(output_compression) || output_compression < 0 || output_compression > 100)) {
+      return res.status(400).json({ error: "Compression must be an integer from 0 to 100." });
+    }
+
+    const generatePayload = {
       model: "gpt-image-1",
       prompt,
-      size: typeof size === "string" ? size : "1024x1024"
-    });
+      size,
+      quality,
+      output_format
+    };
+    if (output_format === "jpeg") {
+      generatePayload.output_compression = output_compression;
+    }
+
+    const result = await openai.images.generate(generatePayload);
 
     const b64 = result.data?.[0]?.b64_json;
     if (!b64) {
       return res.status(502).json({ error: "No image returned by API" });
     }
 
-    res.json({ b64 });
+    const mimeType = output_format === "jpeg" ? "image/jpeg" : "image/png";
+    res.json({ b64, mime_type: mimeType });
   } catch (error) {
-    const message = error?.error?.message || error?.message || "Image generation failed";
+    const message = formatOpenAIError(error, "Image generation failed");
+    console.error("Generate error:", message);
     res.status(500).json({ error: message });
   }
 });
 
 app.post("/edit", async (req, res) => {
   try {
-    const { prompt, size, image_b64 } = req.body || {};
+    const { prompt, size, quality, output_format, output_compression, image_b64, image_mime_type } = req.body || {};
     if (!prompt || typeof prompt !== "string") {
       return res.status(400).json({ error: "Missing prompt" });
     }
@@ -358,24 +533,48 @@ app.post("/edit", async (req, res) => {
       return res.status(400).json({ error: "Missing source image" });
     }
 
-    const imageBuffer = Buffer.from(image_b64, "base64");
-    const imageFile = new File([imageBuffer], "source.png", { type: "image/png" });
+    if (!ALLOWED_SIZES.has(size)) {
+      return res.status(400).json({ error: "Unsupported size. Use 1024x1024, 1024x1536, or 1536x1024." });
+    }
+    if (!ALLOWED_QUALITIES.has(quality)) {
+      return res.status(400).json({ error: "Unsupported quality. Use low, medium, or high." });
+    }
+    if (!ALLOWED_OUTPUT_FORMATS.has(output_format)) {
+      return res.status(400).json({ error: "Unsupported format. Use jpeg or png." });
+    }
+    if (output_format === "jpeg" && (!Number.isInteger(output_compression) || output_compression < 0 || output_compression > 100)) {
+      return res.status(400).json({ error: "Compression must be an integer from 0 to 100." });
+    }
 
-    const result = await openai.images.edit({
+    const imageBuffer = Buffer.from(image_b64, "base64");
+    const sourceMimeType = image_mime_type === "image/jpeg" ? "image/jpeg" : "image/png";
+    const sourceExt = sourceMimeType === "image/jpeg" ? "jpg" : "png";
+    const imageFile = new File([imageBuffer], "source." + sourceExt, { type: sourceMimeType });
+
+    const editPayload = {
       model: "gpt-image-1",
       prompt,
       image: imageFile,
-      size: typeof size === "string" ? size : "1024x1024"
-    });
+      size,
+      quality,
+      output_format
+    };
+    if (output_format === "jpeg") {
+      editPayload.output_compression = output_compression;
+    }
+
+    const result = await openai.images.edit(editPayload);
 
     const b64 = result.data?.[0]?.b64_json;
     if (!b64) {
       return res.status(502).json({ error: "No edited image returned by API" });
     }
 
-    res.json({ b64 });
+    const mimeType = output_format === "jpeg" ? "image/jpeg" : "image/png";
+    res.json({ b64, mime_type: mimeType });
   } catch (error) {
-    const message = error?.error?.message || error?.message || "Image edit failed";
+    const message = formatOpenAIError(error, "Image edit failed");
+    console.error("Edit error:", message);
     res.status(500).json({ error: message });
   }
 });
