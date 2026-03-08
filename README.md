@@ -5,9 +5,10 @@ This app runs on your computer and lets you:
 - include optional reference images as context for generation
 - include separate optional reference images as context for editing
 - edit the selected image with another prompt
+- keep image history persisted between restarts
 - download the result
 
-It uses OpenAI model `gpt-image-1`.
+It uses OpenAI model `gpt-image-1.5`.
 
 ## Before you start
 
@@ -56,6 +57,22 @@ Then open:
 
 Keep that terminal window open while using the app.
 
+## Project structure
+
+The app is now split into backend and frontend folders:
+
+- `server.js`: startup entrypoint
+- `src/app.js`: express app wiring
+- `src/routes/api.js`: API routes (`/api/*`)
+- `src/services/imageService.js`: OpenAI image generation/edit logic
+- `src/services/historyStore.js`: persistent history storage
+- `src/config/constants.js`: shared config/constants
+- `src/utils/formatOpenAIError.js`: API error formatter
+- `public/index.html`: UI markup
+- `public/styles.css`: UI styles
+- `public/app.js`: frontend behavior/state
+- `data/history.json`: local JSON database for image history
+
 ## Daily use
 
 1. Start app: `npm run dev`
@@ -67,6 +84,13 @@ Keep that terminal window open while using the app.
 7. (Optional) Upload edit-specific reference images (separate from generation references)
 8. Type edit prompt and click **Edit Selected**
 9. Click **Download** to save current image
+
+## Data storage
+
+- A local JSON database is used at `data/history.json`.
+- Each generate/edit result is stored automatically.
+- On page load, history is fetched from `/api/history` and restored in the UI.
+- Max stored history entries defaults to `50` (configurable with `MAX_HISTORY_ITEMS` in `.env`).
 
 ## Size limits
 
@@ -106,6 +130,9 @@ If you see API key errors:
 - confirm `.env` exists in the `Dalle` folder
 - confirm line is exactly `OPENAI_API_KEY=...`
 - restart app after changing `.env`
+
+If you want to change the image model:
+- set `OPENAI_IMAGE_MODEL=...` in `.env` (default is `gpt-image-1.5`)
 
 If you see a safety/policy rejection:
 - sometimes benign prompts can be blocked by mistake

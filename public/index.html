@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dall-E Goblin</title>
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <img src="/images/goblin-profile-right.png" alt="Dall-E Goblin logo" />
+      </div>
+      <h1>Dall-E Goblin</h1>
+    </div>
+    <p>Create images from prompts, then iterate with edits and optional reference images.</p>
+
+    <h2>1) Generate New Image</h2>
+    <textarea id="prompt" placeholder="Example: cinematic product shot of a matte black coffee grinder on a marble counter, warm morning sunlight."></textarea>
+    <div class="row">
+      <label for="referenceImages">Reference images (optional):</label>
+      <input id="referenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+      <button id="clearReferences" class="secondary" type="button">Clear references</button>
+    </div>
+    <div class="hint" id="referenceSummary">No reference images selected.</div>
+    <div class="row">
+      <label for="size">Size:</label>
+      <select id="size">
+        <option value="1024x1024">1024x1024</option>
+        <option value="1024x1536">1024x1536 (portrait)</option>
+        <option value="1536x1024">1536x1024 (landscape)</option>
+      </select>
+      <label for="quality">Quality:</label>
+      <select id="quality">
+        <option value="low">Low (faster)</option>
+        <option value="medium">Medium</option>
+        <option value="high">High (slower)</option>
+      </select>
+      <label for="format">Format:</label>
+      <select id="format">
+        <option value="jpeg">JPEG (smaller/faster)</option>
+        <option value="png">PNG (larger)</option>
+      </select>
+      <label for="compression">Compression:</label>
+      <input id="compression" type="number" min="0" max="100" step="1" value="80" />
+      <button id="generate" type="button">Generate New</button>
+    </div>
+
+    <div id="editSection" style="display:none">
+      <h2>2) Edit Selected Image</h2>
+      <textarea id="editPrompt" placeholder="Example: shift to golden hour lighting, add subtle dust particles, keep composition and subject."></textarea>
+      <div class="row">
+        <label for="editReferenceImages">Edit reference images (optional):</label>
+        <input id="editReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+        <button id="clearEditReferences" class="secondary" type="button">Clear edit references</button>
+      </div>
+      <div class="hint" id="editReferenceSummary">No edit reference images selected.</div>
+      <div class="row">
+        <button id="edit" type="button" style="display:none">Edit Selected</button>
+        <a id="download" class="download" href="#" download="mini-dalle-image.png">Download</a>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div class="hint">Supported sizes: 1024x1024, 1024x1536, 1536x1024.</div>
+    <div class="hint">Compression applies to JPEG only. Your size/quality/format/compression selections are saved automatically.</div>
+    <div class="canvas">
+      <img id="preview" alt="Generated image preview" />
+    </div>
+    <div class="hint">Tip: click any thumbnail below to branch edits from an older version.</div>
+    <div class="history" id="history"></div>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
