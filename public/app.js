@@ -48,6 +48,12 @@ const externalEditReferenceImagesInputEl = document.getElementById("externalEdit
 const clearExternalEditReferencesBtn = document.getElementById("clearExternalEditReferences");
 const externalEditReferenceSummaryEl = document.getElementById("externalEditReferenceSummary");
 const externalResultPreviewEl = document.getElementById("externalResultPreview");
+const editResultPromptEl = document.getElementById("editResultPrompt");
+const editResultReferenceImagesInputEl = document.getElementById("editResultReferenceImages");
+const clearEditResultReferencesBtn = document.getElementById("clearEditResultReferences");
+const editResultReferenceSummaryEl = document.getElementById("editResultReferenceSummary");
+const editResultVariationBtn = document.getElementById("editResultVariation");
+const editResultDownloadEl = document.getElementById("editResultDownload");
 
 const quickEditCardEl = document.getElementById("quickEditCard");
 const selectedGeneratedInfoEl = document.getElementById("selectedGeneratedInfo");
@@ -56,6 +62,9 @@ const createStatusEl = document.getElementById("createStatus");
 const editStatusEl = document.getElementById("editStatus");
 const createPreviewCanvasEl = document.getElementById("createPreviewCanvas");
 const previewEl = document.getElementById("preview");
+const editResultSectionEl = document.getElementById("editResultSection");
+const selectedEditInfoEl = document.getElementById("selectedEditInfo");
+const editResultStatusEl = document.getElementById("editResultStatus");
 const editResultCanvasEl = document.getElementById("editResultCanvas");
 const createHistoryEl = document.getElementById("createHistory");
 const editHistoryEl = document.getElementById("editHistory");
@@ -96,6 +105,7 @@ let selectedEditId = null;
 let createReferenceImages = [];
 let quickEditReferenceImages = [];
 let externalEditReferenceImages = [];
+let editResultReferenceImages = [];
 let externalSourceImage = null;
 let isEditingSavedApiKey = false;
 let previousQualityValue = "low";
@@ -171,6 +181,7 @@ async function dbAddCapped(storeName, item) {
   const all = await dbGetAll(storeName);
   const next = all.filter((it) => String(it.id) !== String(item.id));
   next.unshift(item);
+  next.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   if (next.length > MAX_IMAGES_PER_TAB) {
     next.length = MAX_IMAGES_PER_TAB;
   }
@@ -201,6 +212,7 @@ function setButtons(disabled) {
   generateBtn.disabled = disabled;
   quickEditBtn.disabled = disabled;
   externalEditBtn.disabled = disabled;
+  editResultVariationBtn.disabled = disabled;
 }
 
 function getSelectedRenderSettings() {
@@ -455,13 +467,20 @@ function selectEditImage(id) {
     externalResultPreviewEl.removeAttribute("src");
     externalResultPreviewEl.style.display = "none";
     editResultCanvasEl.classList.add("hidden");
+    editResultSectionEl.classList.add("hidden");
     externalDownloadEl.style.display = "none";
+    editResultDownloadEl.style.display = "none";
+    selectedEditInfoEl.textContent = "No edited image selected.";
+    editResultStatusEl.textContent = "";
     return;
   }
   editResultCanvasEl.classList.remove("hidden");
+  editResultSectionEl.classList.remove("hidden");
+  selectedEditInfoEl.textContent = "Selected image: " + (item.originPrompt || "Edited image").slice(0, 90);
   externalResultPreviewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   externalResultPreviewEl.style.display = "block";
   setDownloadLink(externalDownloadEl, item.b64, item.mimeType, "dall-e-goblin-edit");
+  setDownloadLink(editResultDownloadEl, item.b64, item.mimeType, "dall-e-goblin-edit");
   renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
 }
 
@@ -780,12 +799,77 @@ async function editUploadedImage() {
   }
 }
 
+async function editSelectedResultVariation() {
+  const prompt = editResultPromptEl.value.trim();
+  const { settings, error } = getSelectedRenderSettings();
+  const base = editHistory.find((entry) => String(entry.id) === String(selectedEditId));
+
+  if (!base) {
+    editResultStatusEl.textContent = "Select an edited image first.";
+    return;
+  }
+  if (!prompt) {
+    editResultStatusEl.textContent = "Please enter a variation prompt.";
+    return;
+  }
+  if (!settings) {
+    editResultStatusEl.textContent = error;
+    return;
+  }
+  if (!canUseHighQuality() && settings.quality === "high") {
+    openPaywallModal(
+      "High quality generation is available when you use your own API key or choose subscription.",
+      "paywall_shown_high_quality_locked"
+    );
+    return;
+  }
+
+  saveSettings();
+  setButtons(true);
+  editResultStatusEl.textContent = "Creating variation...";
+
+  try {
+    const payload = {
+      prompt,
+      ...settings,
+      image_b64: base.b64,
+      image_mime_type: base.mimeType,
+      parent_id: base.id
+    };
+    const userApiKey = getUserApiKey();
+    if (userApiKey) payload.user_api_key = userApiKey;
+    if (editResultReferenceImages.length) payload.reference_images = editResultReferenceImages;
+    const data = await requestJSON("/api/edit", payload);
+
+    const mimeType = data.mime_type || "image/png";
+    const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: base.id });
+    await addEditHistoryItem(entry);
+    editResultStatusEl.textContent = "Variation created. (" + editHistory.length + "/" + MAX_IMAGES_PER_TAB + ")";
+  } catch (requestError) {
+    if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
+      openPaywallModal(
+        "Your free usage is over. Add your own API key or choose subscription.",
+        "paywall_shown_trial_expired"
+      );
+    }
+    if (requestError?.code === "INVALID_USER_API_KEY") {
+      alert("Your API key is invalid. Please update it.");
+      ensureApiKeyPanelOpen();
+      userApiKeyEl.focus();
+    }
+    editResultStatusEl.textContent = "Error: " + (requestError?.message || "Unknown error");
+  } finally {
+    setButtons(false);
+  }
+}
+
 tabCreateEl.addEventListener("click", () => switchTab("create"));
 tabEditEl.addEventListener("click", () => switchTab("edit"));
 
 generateBtn.addEventListener("click", generateImage);
 quickEditBtn.addEventListener("click", quickEditGeneratedImage);
 externalEditBtn.addEventListener("click", editUploadedImage);
+editResultVariationBtn.addEventListener("click", editSelectedResultVariation);
 clearCreateHistoryBtn.addEventListener("click", () => void clearCreateHistory());
 clearEditHistoryBtn.addEventListener("click", () => void clearEditHistory());
 
@@ -1066,6 +1150,41 @@ clearExternalEditReferencesBtn.addEventListener("click", () => {
   );
 });
 
+editResultReferenceImagesInputEl.addEventListener("change", async () => {
+  try {
+    editResultReferenceImages = await filesToPayload(
+      Array.from(editResultReferenceImagesInputEl.files || []),
+      "edit references"
+    );
+    renderSummary(
+      editResultReferenceSummaryEl,
+      editResultReferenceImages,
+      "",
+      "Using reference images "
+    );
+  } catch (error) {
+    editResultReferenceImages = [];
+    editResultReferenceImagesInputEl.value = "";
+    renderSummary(
+      editResultReferenceSummaryEl,
+      editResultReferenceImages,
+      "",
+      "Using reference images "
+    );
+    editResultStatusEl.textContent = "Error: " + (error?.message || "Invalid edit reference");
+  }
+});
+clearEditResultReferencesBtn.addEventListener("click", () => {
+  editResultReferenceImages = [];
+  editResultReferenceImagesInputEl.value = "";
+  renderSummary(
+    editResultReferenceSummaryEl,
+    editResultReferenceImages,
+    "",
+    "Using reference images "
+  );
+});
+
 loadSettings();
 previousQualityValue = qualityEl.value;
 loadUserApiKey();
@@ -1085,4 +1204,5 @@ renderSummary(
   "No edit references selected.",
   "Using edit references "
 );
+renderSummary(editResultReferenceSummaryEl, [], "", "Using reference images ");
 await loadHistoriesFromDB();

@@ -110,6 +110,11 @@ textarea {
   margin: 10px 0 14px;
 }
 
+.workspace-divider {
+  margin: 14px 0 10px;
+  border-top: 1px solid var(--border);
+}
+
 .tab {
   border-color: var(--border);
   background: #fff;
@@ -165,8 +170,8 @@ textarea {
   padding-bottom: 8px;
   border-bottom: 1px solid #cfe3da;
   color: #3f6d5f;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
