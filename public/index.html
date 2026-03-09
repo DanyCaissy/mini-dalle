@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
+  <div id="siteBackground" class="site-background hidden" aria-hidden="true"></div>
   <main class="wrap">
     <div class="brand">
       <a class="brand-main" href="/" aria-label="Go to Dall-E Goblin home page">
@@ -18,7 +19,10 @@
         </div>
         <h1>Dall-E Goblin</h1>
       </a>
-      <button id="openContactModal" class="secondary" type="button">Contact</button>
+      <div class="brand-actions">
+        <button id="clearBackgroundImage" class="secondary hidden" type="button">Clear background image</button>
+        <button id="openContactModal" class="secondary" type="button">Contact</button>
+      </div>
     </div>
     <p id="appIntroCopy">Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and image-guided transformations with reference images. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download versions.</p>
 
@@ -100,6 +104,7 @@
       <div id="createPreviewActions" class="row hidden">
         <button id="quickShare" class="secondary" type="button">Share Selected</button>
         <a id="quickDownload" class="download" href="#" download="dall-e-goblin-image.png">Download Selected</a>
+        <button id="quickSetBackground" class="secondary background-action" type="button">Set as background image</button>
       </div>
       <div id="quickEditCard" class="panel quick-edit" style="display:none">
         <div class="quick-edit-kicker">Next Step: Refine This Image</div>
@@ -151,6 +156,7 @@
       <div id="editResultActions" class="row hidden">
         <button id="editResultShare" class="secondary" type="button">Share Selected</button>
         <a id="editResultDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Selected</a>
+        <button id="editResultSetBackground" class="secondary background-action" type="button">Set as background image</button>
       </div>
       <div id="editResultSection" class="panel quick-edit hidden">
         <div class="quick-edit-kicker">Next Step: Refine This Image</div>

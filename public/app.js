@@ -40,6 +40,7 @@ const quickEditReferenceImagesInputEl = document.getElementById("quickEditRefere
 const clearQuickEditReferencesBtn = document.getElementById("clearQuickEditReferences");
 const quickEditReferenceSummaryEl = document.getElementById("quickEditReferenceSummary");
 const quickShareBtn = document.getElementById("quickShare");
+const quickSetBackgroundBtn = document.getElementById("quickSetBackground");
 
 const externalSourceImageInputEl = document.getElementById("externalSourceImage");
 const clearExternalSourceImageBtn = document.getElementById("clearExternalSourceImage");
@@ -58,6 +59,7 @@ const editResultReferenceSummaryEl = document.getElementById("editResultReferenc
 const editResultVariationBtn = document.getElementById("editResultVariation");
 const editResultShareBtn = document.getElementById("editResultShare");
 const editResultDownloadEl = document.getElementById("editResultDownload");
+const editResultSetBackgroundBtn = document.getElementById("editResultSetBackground");
 
 const quickEditCardEl = document.getElementById("quickEditCard");
 const selectedGeneratedInfoEl = document.getElementById("selectedGeneratedInfo");
@@ -100,6 +102,8 @@ const contactStatusEl = document.getElementById("contactStatus");
 const openContactModalEl = document.getElementById("openContactModal");
 const contactModalEl = document.getElementById("contactModal");
 const contactModalCloseEl = document.getElementById("contactModalClose");
+const clearBackgroundImageBtn = document.getElementById("clearBackgroundImage");
+const siteBackgroundEl = document.getElementById("siteBackground");
 
 const allowedSourceMimeTypes = new Set(["image/jpeg", "image/png"]);
 const createHistory = [];
@@ -120,6 +124,7 @@ const USER_API_KEY_STORAGE_KEY = "dalle-goblin-user-api-key";
 const API_KEY_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-api-key-panel-open";
 const OUTPUT_SETTINGS_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-output-settings-panel-open";
 const ACTIVE_TAB_STORAGE_KEY = "dalle-goblin-active-tab";
+const BACKGROUND_IMAGE_STORAGE_KEY = "dalle-goblin-background-image-ref";
 
 let dbPromise = null;
 let requestLimitPerIp = 2;
@@ -238,9 +243,11 @@ function setButtons(disabled) {
   generateBtn.disabled = disabled;
   quickEditBtn.disabled = disabled;
   quickShareBtn.disabled = disabled;
+  quickSetBackgroundBtn.disabled = disabled;
   externalEditBtn.disabled = disabled;
   editResultVariationBtn.disabled = disabled;
   editResultShareBtn.disabled = disabled;
+  editResultSetBackgroundBtn.disabled = disabled;
 }
 
 function getSelectedRenderSettings() {
@@ -603,6 +610,7 @@ async function deleteCreateImage(id) {
     if (createHistory.length) selectCreateImage(createHistory[0].id);
     else selectCreateImage(null);
   }
+  applyStoredBackgroundImage();
 }
 
 async function deleteEditImage(id) {
@@ -616,6 +624,7 @@ async function deleteEditImage(id) {
     if (editHistory.length) selectEditImage(editHistory[0].id);
     else selectEditImage(null);
   }
+  applyStoredBackgroundImage();
 }
 
 async function clearCreateHistory() {
@@ -625,6 +634,7 @@ async function clearCreateHistory() {
   renderCounter(createHistoryCountEl, 0);
   renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
   selectCreateImage(null);
+  applyStoredBackgroundImage();
   setStatus("Create history cleared.", "create");
 }
 
@@ -635,6 +645,7 @@ async function clearEditHistory() {
   renderCounter(editHistoryCountEl, 0);
   renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
   selectEditImage(null);
+  applyStoredBackgroundImage();
   setStatus("Edit history cleared.", "edit");
 }
 
@@ -689,6 +700,82 @@ async function copyTextToClipboard(text) {
     return true;
   }
   return false;
+}
+
+function getStoredBackgroundImageRef() {
+  const raw = localStorage.getItem(BACKGROUND_IMAGE_STORAGE_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!["create", "edit"].includes(parsed.sourceTab)) return null;
+    if (parsed.id === undefined || parsed.id === null) return null;
+    return { sourceTab: parsed.sourceTab, id: String(parsed.id) };
+  } catch {
+    localStorage.removeItem(BACKGROUND_IMAGE_STORAGE_KEY);
+    return null;
+  }
+}
+
+function findHistoryItem(sourceTab, id) {
+  const collection = sourceTab === "edit" ? editHistory : createHistory;
+  return collection.find((entry) => String(entry.id) === String(id)) || null;
+}
+
+function applyBackgroundImageItem(item) {
+  if (!item) {
+    siteBackgroundEl.style.backgroundImage = "";
+    siteBackgroundEl.classList.add("hidden");
+    return;
+  }
+
+  siteBackgroundEl.style.backgroundImage = `url("data:${item.mimeType};base64,${item.b64}")`;
+  siteBackgroundEl.classList.remove("hidden");
+}
+
+function hasBackgroundImage() {
+  const storedRef = getStoredBackgroundImageRef();
+  return Boolean(storedRef && findHistoryItem(storedRef.sourceTab, storedRef.id));
+}
+
+function updateBackgroundControls() {
+  clearBackgroundImageBtn.classList.toggle("hidden", !hasBackgroundImage());
+}
+
+function applyStoredBackgroundImage() {
+  const storedRef = getStoredBackgroundImageRef();
+  const item = storedRef ? findHistoryItem(storedRef.sourceTab, storedRef.id) : null;
+
+  if (!item && storedRef) {
+    localStorage.removeItem(BACKGROUND_IMAGE_STORAGE_KEY);
+  }
+
+  applyBackgroundImageItem(item);
+  updateBackgroundControls();
+}
+
+function setBackgroundFromImage(item, sourceTab, statusEl) {
+  if (!item) {
+    applyStatusState(statusEl, "Error: Select an image first.");
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      BACKGROUND_IMAGE_STORAGE_KEY,
+      JSON.stringify({ sourceTab, id: String(item.id) })
+    );
+    applyStoredBackgroundImage();
+    applyStatusState(statusEl, "");
+  } catch {
+    applyStatusState(statusEl, "Error: Could not save background image in this browser.");
+  }
+}
+
+function clearBackgroundImage() {
+  localStorage.removeItem(BACKGROUND_IMAGE_STORAGE_KEY);
+  applyStoredBackgroundImage();
 }
 
 async function shareHistoryImage(item, sourceTab, statusEl) {
@@ -1004,6 +1091,16 @@ async function shareSelectedEditImage() {
   await shareHistoryImage(item, "edit", editResultStatusEl);
 }
 
+function setSelectedCreateImageAsBackground() {
+  const item = createHistory.find((entry) => String(entry.id) === String(selectedCreateId));
+  setBackgroundFromImage(item, "create", quickEditStatusEl);
+}
+
+function setSelectedEditImageAsBackground() {
+  const item = editHistory.find((entry) => String(entry.id) === String(selectedEditId));
+  setBackgroundFromImage(item, "edit", editResultStatusEl);
+}
+
 tabCreateEl.addEventListener("click", () => switchTab("create"));
 tabEditEl.addEventListener("click", () => switchTab("edit"));
 
@@ -1012,13 +1109,20 @@ quickEditBtn.addEventListener("click", quickEditGeneratedImage);
 quickShareBtn.addEventListener("click", () => {
   void shareSelectedCreateImage();
 });
+quickSetBackgroundBtn.addEventListener("click", () => {
+  setSelectedCreateImageAsBackground();
+});
 externalEditBtn.addEventListener("click", editUploadedImage);
 editResultVariationBtn.addEventListener("click", editSelectedResultVariation);
 editResultShareBtn.addEventListener("click", () => {
   void shareSelectedEditImage();
 });
+editResultSetBackgroundBtn.addEventListener("click", () => {
+  setSelectedEditImageAsBackground();
+});
 clearCreateHistoryBtn.addEventListener("click", () => void clearCreateHistory());
 clearEditHistoryBtn.addEventListener("click", () => void clearEditHistory());
+clearBackgroundImageBtn.addEventListener("click", clearBackgroundImage);
 
 sizeEl.addEventListener("change", saveSettings);
 formatEl.addEventListener("change", saveSettings);
@@ -1357,3 +1461,4 @@ renderSummary(
 );
 renderSummary(editResultReferenceSummaryEl, [], "", "Using reference images ");
 await loadHistoriesFromDB();
+applyStoredBackgroundImage();

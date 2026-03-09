@@ -20,12 +20,31 @@ body {
   margin: 0;
   font-family: "Segoe UI", Tahoma, sans-serif;
   color: var(--ink);
-  background:
+  background-image:
+    linear-gradient(rgba(247, 244, 237, 0.74), rgba(247, 244, 237, 0.74)),
     radial-gradient(circle at 10% 0%, #ebe2d5 0, transparent 50%),
-    radial-gradient(circle at 90% 100%, #efe7db 0, transparent 45%),
-    var(--bg);
+    radial-gradient(circle at 90% 100%, #efe7db 0, transparent 45%);
+  background-color: var(--bg);
+  background-position: center, 0 0, 100% 100%;
+  background-size: cover, auto, auto;
+  background-repeat: no-repeat, no-repeat, no-repeat;
+  background-attachment: fixed, scroll, scroll;
   min-height: 100vh;
   padding: 24px 16px;
+  position: relative;
+}
+
+.site-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  opacity: 0.55;
+  pointer-events: none;
+  filter: saturate(0.95);
 }
 
 .wrap {
@@ -36,6 +55,8 @@ body {
   border-radius: 16px;
   padding: 18px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
+  position: relative;
+  z-index: 1;
 }
 
 h1 {
@@ -50,6 +71,12 @@ h1 {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .brand-main {
@@ -422,6 +449,10 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: #faf7f1;
+}
+
+.background-action {
+  margin-left: auto;
 }
 
 .api-key-input {
