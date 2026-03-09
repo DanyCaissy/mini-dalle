@@ -12,14 +12,25 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function buildSafeDownloadName(promptText, fallbackBaseName) {
+  const normalized = String(promptText || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+
+  if (!normalized) {
+    return fallbackBaseName;
+  }
+
+  return normalized.slice(0, 48).replace(/-+$/g, "") || fallbackBaseName;
+}
+
 function renderSharedImagePage(sharedImage) {
-  const promptText = sharedImage?.prompt_text ? escapeHtml(sharedImage.prompt_text) : "";
+  const rawPromptText = sharedImage?.prompt_text || "";
+  const promptText = rawPromptText ? escapeHtml(rawPromptText) : "";
   const title = promptText ? `${promptText} | Dall-E Goblin` : "Shared Image | Dall-E Goblin";
   const imageSrc = `data:${sharedImage.mime_type};base64,${sharedImage.image_b64}`;
-  const extension = sharedImage.mime_type === "image/jpeg" ? "jpg" : "png";
-  const downloadName = promptText
-    ? promptText.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "shared-image"
-    : "shared-image";
 
   return `<!doctype html>
 <html lang="en">
@@ -171,7 +182,7 @@ function renderSharedImagePage(sharedImage) {
       <img src="${imageSrc}" alt="Shared AI-generated image" />
     </div>
     <div class="image-actions">
-      <a class="action-link secondary" href="${imageSrc}" download="${downloadName}.${extension}">Download Image</a>
+      <a class="action-link secondary" href="/shared/${sharedImage.share_id}/download">Download Image</a>
     </div>
     <div class="cta">
       <p>Want to generate or edit your own images with prompts, uploads, and reference images?</p>
@@ -204,6 +215,30 @@ export function createApp() {
     } catch (error) {
       console.error("Shared image page failed:", error);
       res.status(500).send("Failed to load shared image");
+    }
+  });
+
+  app.get("/shared/:shareId/download", async (req, res) => {
+    try {
+      const shareId = String(req.params?.shareId || "").trim();
+      if (!shareId) {
+        return res.status(404).send("Not found");
+      }
+      const sharedImage = await getSharedImageByShareId(shareId);
+      if (!sharedImage) {
+        return res.status(404).send("Shared image not found");
+      }
+
+      const extension = sharedImage.mime_type === "image/jpeg" ? "jpg" : "png";
+      const fileName = buildSafeDownloadName(sharedImage.prompt_text, "shared-image") + "." + extension;
+      const imageBuffer = Buffer.from(sharedImage.image_b64, "base64");
+
+      res.setHeader("Content-Type", sharedImage.mime_type);
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      res.send(imageBuffer);
+    } catch (error) {
+      console.error("Shared image download failed:", error);
+      res.status(500).send("Failed to download shared image");
     }
   });
 

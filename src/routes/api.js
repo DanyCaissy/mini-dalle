@@ -74,6 +74,12 @@ function getClientUserAgent(req) {
   return req.get("user-agent") || null;
 }
 
+router.get("/config", (_req, res) => {
+  res.json({
+    request_limit_per_ip: REQUEST_LIMIT_PER_IP
+  });
+});
+
 function buildLogPayload(req, requestType, body, extra = {}) {
   return {
     ipAddress: getClientIp(req),

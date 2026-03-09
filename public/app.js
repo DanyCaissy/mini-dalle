@@ -18,12 +18,15 @@ const qualityEl = document.getElementById("quality");
 const formatEl = document.getElementById("format");
 const toggleApiKeyPanelBtn = document.getElementById("toggleApiKeyPanel");
 const apiKeyPanelBodyEl = document.getElementById("apiKeyPanelBody");
+const toggleOutputSettingsPanelBtn = document.getElementById("toggleOutputSettingsPanel");
+const outputSettingsPanelBodyEl = document.getElementById("outputSettingsPanelBody");
 const userApiKeyEl = document.getElementById("userApiKey");
 const saveUserApiKeyBtn = document.getElementById("saveUserApiKey");
 const clearUserApiKeyBtn = document.getElementById("clearUserApiKey");
 const editUserApiKeyBtn = document.getElementById("editUserApiKey");
 const savedApiKeyDisplayEl = document.getElementById("savedApiKeyDisplay");
 const apiKeyModeHintEl = document.getElementById("apiKeyModeHint");
+const appIntroCopyEl = document.getElementById("appIntroCopy");
 
 const generateBtn = document.getElementById("generate");
 const quickEditBtn = document.getElementById("quickEdit");
@@ -76,7 +79,6 @@ const editHistoryCountEl = document.getElementById("editHistoryCount");
 const clearCreateHistoryBtn = document.getElementById("clearCreateHistory");
 const clearEditHistoryBtn = document.getElementById("clearEditHistory");
 const quickDownloadEl = document.getElementById("quickDownload");
-const externalDownloadEl = document.getElementById("externalDownload");
 const paywallModalEl = document.getElementById("paywallModal");
 const paywallCloseEl = document.getElementById("paywallClose");
 const paywallMessageEl = document.getElementById("paywallMessage");
@@ -116,8 +118,11 @@ let previousQualityValue = "low";
 const SETTINGS_STORAGE_KEY = "mini-dalle-settings-v1";
 const USER_API_KEY_STORAGE_KEY = "dalle-goblin-user-api-key";
 const API_KEY_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-api-key-panel-open";
+const OUTPUT_SETTINGS_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-output-settings-panel-open";
+const ACTIVE_TAB_STORAGE_KEY = "dalle-goblin-active-tab";
 
 let dbPromise = null;
+let requestLimitPerIp = 2;
 
 function activeStatusScope() {
   return editPanelEl.style.display === "none" ? "create" : "edit";
@@ -226,6 +231,7 @@ function switchTab(mode) {
   tabEditEl.classList.toggle("active", !createActive);
   tabCreateEl.setAttribute("aria-selected", createActive ? "true" : "false");
   tabEditEl.setAttribute("aria-selected", createActive ? "false" : "true");
+  localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, createActive ? "create" : "edit");
 }
 
 function setButtons(disabled) {
@@ -297,6 +303,16 @@ function ensureApiKeyPanelOpen() {
   }
 }
 
+function setOutputSettingsPanelOpen(open) {
+  outputSettingsPanelBodyEl.style.display = open ? "block" : "none";
+  toggleOutputSettingsPanelBtn.textContent = open ? "Hide" : "Show";
+  localStorage.setItem(OUTPUT_SETTINGS_PANEL_OPEN_STORAGE_KEY, open ? "1" : "0");
+}
+
+function isOutputSettingsPanelOpen() {
+  return outputSettingsPanelBodyEl.style.display !== "none";
+}
+
 function maskApiKey(key) {
   const normalized = String(key || "").trim();
   if (!normalized) return "";
@@ -319,7 +335,27 @@ function updateApiKeyModeHint() {
   const key = getUserApiKey();
   apiKeyModeHintEl.textContent = key
     ? "Using your own API key for requests."
-    : "Using free server key (2 requests available).";
+    : "Using free server key (" + requestLimitPerIp + " requests available).";
+}
+
+function updateIntroCopy() {
+  appIntroCopyEl.textContent =
+    "Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and image-guided transformations with reference images. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download versions. You get " +
+    requestLimitPerIp +
+    " free requests, then you can add your own OpenAI API key to continue.";
+}
+
+async function loadAppConfig() {
+  try {
+    const config = await requestJSON("/api/config", null, "GET");
+    if (Number.isInteger(config?.request_limit_per_ip) && config.request_limit_per_ip > 0) {
+      requestLimitPerIp = config.request_limit_per_ip;
+    }
+  } catch {
+    requestLimitPerIp = 2;
+  }
+  updateIntroCopy();
+  updateApiKeyModeHint();
 }
 
 function loadUserApiKey() {
@@ -518,7 +554,6 @@ function selectEditImage(id) {
     editResultCanvasEl.classList.add("hidden");
     editResultActionsEl.classList.add("hidden");
     editResultSectionEl.classList.add("hidden");
-    externalDownloadEl.style.display = "none";
     editResultDownloadEl.style.display = "none";
     selectedEditInfoEl.textContent = "No edited image selected.";
     applyStatusState(editResultStatusEl, "");
@@ -530,12 +565,6 @@ function selectEditImage(id) {
   selectedEditInfoEl.textContent = "Selected image: " + (item.originPrompt || "Edited image").slice(0, 90);
   externalResultPreviewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   externalResultPreviewEl.style.display = "block";
-  setDownloadLink(
-    externalDownloadEl,
-    item.b64,
-    item.mimeType,
-    buildDownloadBaseName(item.originPrompt, "dall-e-goblin-edit")
-  );
   setDownloadLink(
     editResultDownloadEl,
     item.b64,
@@ -1013,6 +1042,9 @@ saveUserApiKeyBtn.addEventListener("click", () => {
 toggleApiKeyPanelBtn.addEventListener("click", () => {
   setApiKeyPanelOpen(!isApiKeyPanelOpen());
 });
+toggleOutputSettingsPanelBtn.addEventListener("click", () => {
+  setOutputSettingsPanelOpen(!isOutputSettingsPanelOpen());
+});
 editUserApiKeyBtn.addEventListener("click", () => {
   ensureApiKeyPanelOpen();
   isEditingSavedApiKey = true;
@@ -1304,9 +1336,11 @@ clearEditResultReferencesBtn.addEventListener("click", () => {
 
 loadSettings();
 previousQualityValue = qualityEl.value;
+await loadAppConfig();
 loadUserApiKey();
 setApiKeyPanelOpen(localStorage.getItem(API_KEY_PANEL_OPEN_STORAGE_KEY) === "1");
-switchTab("create");
+setOutputSettingsPanelOpen(localStorage.getItem(OUTPUT_SETTINGS_PANEL_OPEN_STORAGE_KEY) === "1");
+switchTab(localStorage.getItem(ACTIVE_TAB_STORAGE_KEY) === "edit" ? "edit" : "create");
 updateSelectedGeneratedInfo(null);
 renderSummary(referenceSummaryEl, [], "No reference images selected.", "Using reference images ");
 renderSummary(

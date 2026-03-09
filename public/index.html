@@ -20,7 +20,7 @@
       </a>
       <button id="openContactModal" class="secondary" type="button">Contact</button>
     </div>
-    <p>Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and image-guided transformations with reference images. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download versions. You get 2 free requests, then you can add your own OpenAI API key to continue.</p>
+    <p id="appIntroCopy">Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and image-guided transformations with reference images. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download versions.</p>
 
     <section class="panel api-key-panel">
       <div class="panel-head">
@@ -37,13 +37,17 @@
           <button id="editUserApiKey" class="secondary" type="button" style="display:none">Edit key</button>
         </div>
         <div class="hint">Need your own key? Create one in your OpenAI dashboard: <a href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Get API key</a>.</div>
-        <div class="hint" id="apiKeyModeHint">Using free server key (2 requests available).</div>
+        <div class="hint" id="apiKeyModeHint"></div>
       </div>
     </section>
 
     <section class="panel settings">
-      <h2>Output Settings</h2>
-      <div class="settings-grid">
+      <div class="panel-head">
+        <h2>Output Settings</h2>
+        <button id="toggleOutputSettingsPanel" class="secondary panel-toggle" type="button">Show</button>
+      </div>
+      <div id="outputSettingsPanelBody" style="display:none">
+        <div class="settings-grid">
         <div class="settings-field">
           <label for="size">Size</label>
           <select id="size">
@@ -67,6 +71,7 @@
             <option value="png">PNG (larger)</option>
           </select>
         </div>
+        </div>
       </div>
     </section>
 
@@ -84,11 +89,9 @@
         <label for="referenceImages">Reference images (optional):</label>
         <input id="referenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
         <button id="clearReferences" class="secondary" type="button">Clear reference images</button>
-      </div>
-      <div class="hint" id="referenceSummary">No reference images selected.</div>
-      <div class="row">
         <button id="generate" type="button">Create Base</button>
       </div>
+      <div class="hint" id="referenceSummary">No reference images selected.</div>
       <div class="status inline" id="createStatus"></div>
 
       <div id="createPreviewCanvas" class="canvas hidden">
@@ -138,12 +141,9 @@
         <label for="externalEditReferenceImages">Edit references (optional):</label>
         <input id="externalEditReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
         <button id="clearExternalEditReferences" class="secondary" type="button">Clear reference images</button>
+        <button id="externalEdit" type="button">Edit Uploaded Image</button>
       </div>
       <div class="hint" id="externalEditReferenceSummary">No edit references selected.</div>
-        <div class="row">
-          <button id="externalEdit" type="button">Edit Uploaded Image</button>
-          <a id="externalDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Result</a>
-      </div>
       <div class="status inline" id="editStatus"></div>
       <div id="editResultCanvas" class="canvas hidden">
         <img id="externalResultPreview" alt="Edited uploaded image preview" />
