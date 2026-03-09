@@ -1,4 +1,4 @@
-const MAX_IMAGES_PER_TAB = 30;
+const MAX_IMAGES_PER_TAB = 16;
 const DB_NAME = "dalle-goblin";
 const DB_VERSION = 1;
 const CREATE_STORE = "create_history";
@@ -63,6 +63,8 @@ const editResultSetBackgroundBtn = document.getElementById("editResultSetBackgro
 
 const quickEditCardEl = document.getElementById("quickEditCard");
 const selectedGeneratedInfoEl = document.getElementById("selectedGeneratedInfo");
+const selectedGeneratedThumbWrapEl = document.getElementById("selectedGeneratedThumbWrap");
+const selectedGeneratedThumbEl = document.getElementById("selectedGeneratedThumb");
 const quickEditStatusEl = document.getElementById("quickEditStatus");
 const createStatusEl = document.getElementById("createStatus");
 const editStatusEl = document.getElementById("editStatus");
@@ -71,6 +73,8 @@ const createPreviewActionsEl = document.getElementById("createPreviewActions");
 const previewEl = document.getElementById("preview");
 const editResultSectionEl = document.getElementById("editResultSection");
 const selectedEditInfoEl = document.getElementById("selectedEditInfo");
+const selectedEditThumbWrapEl = document.getElementById("selectedEditThumbWrap");
+const selectedEditThumbEl = document.getElementById("selectedEditThumb");
 const editResultStatusEl = document.getElementById("editResultStatus");
 const editResultCanvasEl = document.getElementById("editResultCanvas");
 const editResultActionsEl = document.getElementById("editResultActions");
@@ -458,12 +462,16 @@ function setDownloadLink(anchorEl, b64, mimeType, baseName) {
 function updateSelectedGeneratedInfo(item) {
   if (!item) {
     selectedGeneratedInfoEl.textContent = "No generated image selected.";
+    selectedGeneratedThumbEl.removeAttribute("src");
+    selectedGeneratedThumbWrapEl.classList.add("hidden");
     applyStatusState(quickEditStatusEl, "");
     quickEditCardEl.style.display = "none";
     return;
   }
   const snippet = item.originPrompt ? item.originPrompt.slice(0, 90) : "Generated image";
   selectedGeneratedInfoEl.textContent = "Selected image: " + snippet;
+  selectedGeneratedThumbEl.src = "data:" + item.mimeType + ";base64," + item.b64;
+  selectedGeneratedThumbWrapEl.classList.remove("hidden");
   quickEditCardEl.style.display = "block";
 }
 
@@ -568,6 +576,8 @@ function selectEditImage(id) {
     editResultSectionEl.classList.add("hidden");
     editResultDownloadEl.style.display = "none";
     selectedEditInfoEl.textContent = "No edited image selected.";
+    selectedEditThumbEl.removeAttribute("src");
+    selectedEditThumbWrapEl.classList.add("hidden");
     applyStatusState(editResultStatusEl, "");
     return;
   }
@@ -575,6 +585,8 @@ function selectEditImage(id) {
   editResultActionsEl.classList.remove("hidden");
   editResultSectionEl.classList.remove("hidden");
   selectedEditInfoEl.textContent = "Selected image: " + (item.originPrompt || "Edited image").slice(0, 90);
+  selectedEditThumbEl.src = "data:" + item.mimeType + ";base64," + item.b64;
+  selectedEditThumbWrapEl.classList.remove("hidden");
   externalResultPreviewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   externalResultPreviewEl.style.display = "block";
   setDownloadLink(

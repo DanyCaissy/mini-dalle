@@ -234,6 +234,40 @@ textarea {
   text-transform: uppercase;
 }
 
+.selected-context {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border: 1px solid #cfe3da;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.selected-context-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #b9d8cd;
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.selected-context-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.selected-context-text {
+  margin-top: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 label {
   font-size: 14px;
   color: var(--muted);
@@ -527,4 +561,106 @@ button:disabled {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+  body {
+    padding: 14px 10px;
+  }
+
+  .wrap {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .brand {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .brand-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .brand-main {
+    gap: 10px;
+  }
+
+  .logo {
+    width: 68px;
+    height: 68px;
+    border-radius: 14px;
+  }
+
+  h1 {
+    font-size: 22px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .row {
+    gap: 8px;
+  }
+
+  .row > label {
+    width: 100%;
+  }
+
+  .upload-input,
+  .api-key-input,
+  #contactEmail,
+  #contactMessage,
+  .interest-amount-input {
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .row > button,
+  .row > .download,
+  .row > input,
+  .row > select {
+    width: 100%;
+  }
+
+  #createPreviewActions,
+  #editResultActions {
+    display: grid;
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .background-action {
+    margin-left: 0;
+  }
+
+  .selected-context {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .selected-context-thumb {
+    width: 54px;
+    height: 54px;
+  }
+
+  .history {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 92px;
+    grid-template-columns: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .thumb {
+    scroll-snap-align: start;
+  }
 }

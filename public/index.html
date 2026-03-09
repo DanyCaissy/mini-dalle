@@ -109,7 +109,12 @@
       <div id="quickEditCard" class="panel quick-edit" style="display:none">
         <div class="quick-edit-kicker">Next Step: Refine This Image</div>
         <h2>Edit Selected Result</h2>
-        <div class="hint" id="selectedGeneratedInfo">No generated image selected.</div>
+        <div id="selectedGeneratedContext" class="selected-context">
+          <div class="selected-context-thumb hidden" id="selectedGeneratedThumbWrap">
+            <img id="selectedGeneratedThumb" alt="Selected generated image thumbnail" />
+          </div>
+          <div class="hint selected-context-text" id="selectedGeneratedInfo">No generated image selected.</div>
+        </div>
         <textarea id="quickEditPrompt" placeholder="Describe the changes you want while keeping the same composition/subject."></textarea>
         <div class="row">
           <label for="quickEditReferenceImages">Reference images (optional):</label>
@@ -123,7 +128,7 @@
         <div class="status inline" id="quickEditStatus"></div>
       </div>
       <div class="row">
-        <div class="hint">Create history: <span id="createHistoryCount">0/10</span></div>
+        <div class="hint">Create history: <span id="createHistoryCount">0/30</span></div>
         <button id="clearCreateHistory" class="secondary" type="button">Clear generated images</button>
       </div>
       <div class="hint">Tip: click a thumbnail to select the generated image used by Quick Edit.</div>
@@ -161,7 +166,12 @@
       <div id="editResultSection" class="panel quick-edit hidden">
         <div class="quick-edit-kicker">Next Step: Refine This Image</div>
         <h2>Edit Selected Result</h2>
-        <div class="hint" id="selectedEditInfo">No edited image selected.</div>
+        <div id="selectedEditContext" class="selected-context">
+          <div class="selected-context-thumb hidden" id="selectedEditThumbWrap">
+            <img id="selectedEditThumb" alt="Selected edited image thumbnail" />
+          </div>
+          <div class="hint selected-context-text" id="selectedEditInfo">No edited image selected.</div>
+        </div>
         <textarea id="editResultPrompt" placeholder="Describe the changes you want while keeping the same composition/subject."></textarea>
         <div class="row">
           <label for="editResultReferenceImages">Reference images (optional):</label>
@@ -175,7 +185,7 @@
         <div class="status inline" id="editResultStatus"></div>
       </div>
       <div class="row">
-        <div class="hint">Edit history: <span id="editHistoryCount">0/10</span></div>
+        <div class="hint">Edit history: <span id="editHistoryCount">0/30</span></div>
         <button id="clearEditHistory" class="secondary" type="button">Clear edit history</button>
       </div>
       <div class="history" id="editHistory"></div>
