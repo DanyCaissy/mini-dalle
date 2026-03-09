@@ -125,6 +125,7 @@ const API_KEY_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-api-key-panel-open";
 const OUTPUT_SETTINGS_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-output-settings-panel-open";
 const ACTIVE_TAB_STORAGE_KEY = "dalle-goblin-active-tab";
 const BACKGROUND_IMAGE_STORAGE_KEY = "dalle-goblin-background-image-ref";
+const SHARE_REFINE_HANDOFF_STORAGE_KEY = "dalle-goblin-share-refine-handoff";
 
 let dbPromise = null;
 let requestLimitPerIp = 2;
@@ -441,6 +442,10 @@ function buildDownloadBaseName(promptText, fallbackBaseName) {
 
   const maxLength = 48;
   return normalized.slice(0, maxLength).replace(/-+$/g, "") || fallbackBaseName;
+}
+
+function findHistoryMatch(collection, b64, mimeType) {
+  return collection.find((entry) => entry.b64 === b64 && entry.mimeType === mimeType) || null;
 }
 
 function setDownloadLink(anchorEl, b64, mimeType, baseName) {
@@ -851,6 +856,57 @@ async function loadHistoriesFromDB() {
 
   if (editHistory.length) selectEditImage(editHistory[0].id);
   else selectEditImage(null);
+}
+
+async function consumeShareRefineHandoff() {
+  const params = new URLSearchParams(window.location.search);
+  const shareIdFromUrl = String(params.get("refine_shared") || "").trim();
+  const raw = sessionStorage.getItem(SHARE_REFINE_HANDOFF_STORAGE_KEY);
+
+  if (!shareIdFromUrl || !raw) {
+    return;
+  }
+
+  let handoff = null;
+  try {
+    handoff = JSON.parse(raw);
+  } catch {
+    sessionStorage.removeItem(SHARE_REFINE_HANDOFF_STORAGE_KEY);
+    return;
+  }
+
+  if (!handoff || String(handoff.shareId || "").trim() !== shareIdFromUrl) {
+    return;
+  }
+
+  try {
+    const shared = await requestJSON("/api/shared/" + encodeURIComponent(shareIdFromUrl), null, "GET");
+    const existing = findHistoryMatch(editHistory, shared.image_b64, shared.mime_type);
+
+    if (existing) {
+      selectEditImage(existing.id);
+    } else {
+      const entry = createHistoryEntry({
+        b64: shared.image_b64,
+        mimeType: shared.mime_type || "image/png",
+        prompt: shared.prompt_text || "Shared image",
+        parentId: null
+      });
+      await addEditHistoryItem(entry);
+    }
+
+    editResultPromptEl.value = String(handoff.prompt || "").trim();
+    switchTab("edit");
+    editResultSectionEl.scrollIntoView({ behavior: "smooth", block: "start" });
+  } catch (error) {
+    setStatus("Error: " + (error?.message || "Could not load shared image."), "edit");
+  } finally {
+    sessionStorage.removeItem(SHARE_REFINE_HANDOFF_STORAGE_KEY);
+    params.delete("refine_shared");
+    const nextQuery = params.toString();
+    const nextUrl = window.location.pathname + (nextQuery ? "?" + nextQuery : "") + window.location.hash;
+    window.history.replaceState({}, "", nextUrl);
+  }
 }
 
 async function generateImage() {
@@ -1461,4 +1517,5 @@ renderSummary(
 );
 renderSummary(editResultReferenceSummaryEl, [], "", "Using reference images ");
 await loadHistoriesFromDB();
+await consumeShareRefineHandoff();
 applyStoredBackgroundImage();

@@ -220,6 +220,34 @@ function renderSharedImagePage(req, sharedImage) {
       padding-top: 18px;
       border-top: 1px solid var(--border);
     }
+    textarea {
+      width: 100%;
+      min-height: 110px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+    .refine-card {
+      margin-top: 18px;
+      padding: 14px;
+      border: 1px solid #b9d8cd;
+      border-radius: 14px;
+      background: #f4fbf7;
+    }
+    .refine-kicker {
+      margin: 0 0 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #cfe3da;
+      color: #3f6d5f;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
     .image-actions {
       margin-top: 12px;
       display: flex;
@@ -264,11 +292,33 @@ function renderSharedImagePage(req, sharedImage) {
     <div class="image-actions">
       <a class="action-link secondary" href="/shared/${sharedImage.share_id}/download">Download Image</a>
     </div>
+    <div class="refine-card">
+      <div class="refine-kicker">Make your own changes to this image</div>
+      <textarea id="sharedRefinePrompt" placeholder="Example: add fog, make it more cinematic, and keep the same composition."></textarea>
+      <div class="image-actions">
+        <a id="sharedRefineLink" class="action-link" href="/?tab=edit&refine_shared=${sharedImage.share_id}">Refine This Image</a>
+      </div>
+    </div>
     <div class="cta">
       <p>Want to generate or edit your own images with prompts, uploads, and reference images?</p>
       <a href="/">Create your own images</a>
     </div>
   </main>
+  <script>
+    (function () {
+      var promptEl = document.getElementById("sharedRefinePrompt");
+      var linkEl = document.getElementById("sharedRefineLink");
+      if (!promptEl || !linkEl || !window.sessionStorage) return;
+
+      linkEl.addEventListener("click", function () {
+        var prompt = String(promptEl.value || "").trim();
+        sessionStorage.setItem("dalle-goblin-share-refine-handoff", JSON.stringify({
+          shareId: "${sharedImage.share_id}",
+          prompt: prompt
+        }));
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }

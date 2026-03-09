@@ -10,6 +10,7 @@ import {
   countContactMessagesByIpLastDay,
   countServerDefaultRequestsByIp,
   createOrGetSharedImage,
+  getSharedImageByShareId,
   insertContactMessage,
   insertRequestLog,
   insertSubscriptionInterestEvent,
@@ -78,6 +79,32 @@ router.get("/config", (_req, res) => {
   res.json({
     request_limit_per_ip: REQUEST_LIMIT_PER_IP
   });
+});
+
+router.get("/shared/:shareId", async (req, res) => {
+  try {
+    const shareId = String(req.params?.shareId || "").trim();
+    if (!shareId) {
+      return res.status(404).json({ error: "Shared image not found." });
+    }
+
+    const sharedImage = await getSharedImageByShareId(shareId);
+    if (!sharedImage) {
+      return res.status(404).json({ error: "Shared image not found." });
+    }
+
+    res.json({
+      share_id: sharedImage.share_id,
+      mime_type: sharedImage.mime_type,
+      image_b64: sharedImage.image_b64,
+      prompt_text: sharedImage.prompt_text || "",
+      source_tab: sharedImage.source_tab || null,
+      created_at: sharedImage.created_at || null
+    });
+  } catch (error) {
+    console.error("Shared image lookup failed:", error);
+    res.status(500).json({ error: "Failed to load shared image." });
+  }
 });
 
 function buildLogPayload(req, requestType, body, extra = {}) {
