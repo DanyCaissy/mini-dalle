@@ -37,6 +37,55 @@ function buildShareMetaDescription(promptText) {
   return `${base}. Generate and edit your own images with Dall-E Goblin.`;
 }
 
+function getImageDimensions(sharedImage) {
+  try {
+    const buffer = Buffer.from(sharedImage.image_b64, "base64");
+
+    if (sharedImage.mime_type === "image/png" && buffer.length >= 24) {
+      return {
+        width: buffer.readUInt32BE(16),
+        height: buffer.readUInt32BE(20)
+      };
+    }
+
+    if (sharedImage.mime_type === "image/jpeg" && buffer.length >= 4) {
+      let offset = 2;
+      while (offset < buffer.length) {
+        if (buffer[offset] !== 0xff) {
+          offset += 1;
+          continue;
+        }
+
+        const marker = buffer[offset + 1];
+        if (!marker || marker === 0xd8 || marker === 0xd9) {
+          offset += 2;
+          continue;
+        }
+
+        const segmentLength = buffer.readUInt16BE(offset + 2);
+        const isSofMarker = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker);
+
+        if (isSofMarker && offset + 8 < buffer.length) {
+          return {
+            height: buffer.readUInt16BE(offset + 5),
+            width: buffer.readUInt16BE(offset + 7)
+          };
+        }
+
+        if (!segmentLength || segmentLength < 2) {
+          break;
+        }
+
+        offset += 2 + segmentLength;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 function renderSharedImagePage(req, sharedImage) {
   const rawPromptText = sharedImage?.prompt_text || "";
   const promptText = rawPromptText ? escapeHtml(rawPromptText) : "";
@@ -45,6 +94,8 @@ function renderSharedImagePage(req, sharedImage) {
   const imageUrl = buildAbsoluteUrl(req, `/shared/${sharedImage.share_id}/image`);
   const imageSrc = imageUrl;
   const metaDescription = escapeHtml(buildShareMetaDescription(rawPromptText));
+  const dimensions = getImageDimensions(sharedImage);
+  const imageAlt = promptText || "Shared AI-generated image from Dall-E Goblin";
 
   return `<!doctype html>
 <html lang="en">
@@ -58,11 +109,16 @@ function renderSharedImagePage(req, sharedImage) {
   <meta property="og:description" content="${metaDescription}" />
   <meta property="og:url" content="${escapeHtml(pageUrl)}" />
   <meta property="og:image" content="${escapeHtml(imageUrl)}" />
+  <meta property="og:image:type" content="${escapeHtml(sharedImage.mime_type)}" />
+  ${dimensions ? `<meta property="og:image:width" content="${dimensions.width}" />
+  <meta property="og:image:height" content="${dimensions.height}" />` : ""}
+  <meta property="og:image:alt" content="${escapeHtml(imageAlt)}" />
   <meta property="og:site_name" content="Dall-E Goblin" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escapeHtml(title)}" />
   <meta name="twitter:description" content="${metaDescription}" />
   <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
+  <meta name="twitter:image:alt" content="${escapeHtml(imageAlt)}" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <style>
