@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dall-E Goblin</title>
+  <meta name="description" content="Dall-E Goblin is an AI image generator and AI image editor for text-to-image and image-to-image creation. Generate artwork, edit uploaded photos, and create variations with OpenAI image models." />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <link rel="stylesheet" href="/styles.css" />
@@ -11,68 +12,190 @@
 <body>
   <main class="wrap">
     <div class="brand">
-      <div class="logo" aria-hidden="true">
-        <img src="/images/goblin-profile-right.png" alt="Dall-E Goblin logo" />
+      <div class="brand-main">
+        <div class="logo" aria-hidden="true">
+          <img src="/images/goblin-profile-right.png" alt="Dall-E Goblin logo" />
+        </div>
+        <h1>Dall-E Goblin</h1>
       </div>
-      <h1>Dall-E Goblin</h1>
+      <button id="openContactModal" class="secondary" type="button">Contact</button>
     </div>
-    <p>Create images from prompts, then iterate with edits and optional reference images.</p>
+    <p>Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and fast variations. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download the versions you like. You get 2 free requests to try it, then you can add your own OpenAI API key to continue.</p>
 
-    <h2>1) Generate New Image</h2>
-    <textarea id="prompt" placeholder="Example: cinematic product shot of a matte black coffee grinder on a marble counter, warm morning sunlight."></textarea>
-    <div class="row">
-      <label for="referenceImages">Reference images (optional):</label>
-      <input id="referenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
-      <button id="clearReferences" class="secondary" type="button">Clear references</button>
-    </div>
-    <div class="hint" id="referenceSummary">No reference images selected.</div>
-    <div class="row">
-      <label for="size">Size:</label>
-      <select id="size">
-        <option value="1024x1024">1024x1024</option>
-        <option value="1024x1536">1024x1536 (portrait)</option>
-        <option value="1536x1024">1536x1024 (landscape)</option>
-      </select>
-      <label for="quality">Quality:</label>
-      <select id="quality">
-        <option value="low">Low (faster)</option>
-        <option value="medium">Medium</option>
-        <option value="high">High (slower)</option>
-      </select>
-      <label for="format">Format:</label>
-      <select id="format">
-        <option value="jpeg">JPEG (smaller/faster)</option>
-        <option value="png">PNG (larger)</option>
-      </select>
-      <label for="compression">Compression:</label>
-      <input id="compression" type="number" min="0" max="100" step="1" value="80" />
-      <button id="generate" type="button">Generate New</button>
+    <div class="tabs" role="tablist" aria-label="Mode">
+      <button id="tabCreate" class="tab active" type="button" role="tab" aria-selected="true">Create</button>
+      <button id="tabEdit" class="tab" type="button" role="tab" aria-selected="false">Edit</button>
     </div>
 
-    <div id="editSection" style="display:none">
-      <h2>2) Edit Selected Image</h2>
-      <textarea id="editPrompt" placeholder="Example: shift to golden hour lighting, add subtle dust particles, keep composition and subject."></textarea>
+    <section class="panel settings">
+      <h2>Output Settings</h2>
       <div class="row">
-        <label for="editReferenceImages">Edit reference images (optional):</label>
-        <input id="editReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
-        <button id="clearEditReferences" class="secondary" type="button">Clear edit references</button>
+        <label for="userApiKey">Your OpenAI API key:</label>
+        <input id="userApiKey" class="api-key-input" type="text" placeholder="sk-..." />
+        <button id="saveUserApiKey" class="secondary" type="button">Save key</button>
+        <button id="clearUserApiKey" class="secondary" type="button">Clear key</button>
+        <div id="savedApiKeyDisplay" class="saved-key" style="display:none"></div>
+        <button id="editUserApiKey" class="secondary" type="button" style="display:none">Edit key</button>
       </div>
-      <div class="hint" id="editReferenceSummary">No edit reference images selected.</div>
+      <div class="hint">Need your own key? Create one in your OpenAI dashboard: <a href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Get API key</a>.</div>
+      <div class="hint" id="apiKeyModeHint">Using free server key (2 requests available).</div>
       <div class="row">
-        <button id="edit" type="button" style="display:none">Edit Selected</button>
-        <a id="download" class="download" href="#" download="mini-dalle-image.png">Download</a>
+        <label for="size">Size:</label>
+        <select id="size">
+          <option value="1024x1024">1024x1024</option>
+          <option value="1024x1536">1024x1536 (portrait)</option>
+          <option value="1536x1024">1536x1024 (landscape)</option>
+        </select>
+        <label for="quality">Quality:</label>
+        <select id="quality">
+          <option value="low">Low (faster)</option>
+          <option value="medium">Medium</option>
+          <option value="high">High (slower)</option>
+        </select>
+        <label for="format">Format:</label>
+        <select id="format">
+          <option value="jpeg">JPEG (smaller/faster)</option>
+          <option value="png">PNG (larger)</option>
+        </select>
+        <label for="compression">Compression:</label>
+        <input id="compression" type="number" min="0" max="100" step="1" value="80" />
       </div>
-    </div>
+    </section>
 
-    <div class="status" id="status"></div>
+    <section id="createPanel" class="panel tab-panel">
+      <h2>Create Base Image</h2>
+      <textarea id="prompt" placeholder="Example: cinematic product shot of a matte black coffee grinder on a marble counter, warm morning sunlight."></textarea>
+      <div class="row">
+        <label for="referenceImages">Reference images (optional):</label>
+        <input id="referenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+        <button id="clearReferences" class="secondary" type="button">Clear references</button>
+      </div>
+      <div class="hint" id="referenceSummary">No reference images selected.</div>
+      <div class="row">
+        <button id="generate" type="button">Create Base</button>
+      </div>
+      <div class="status inline" id="createStatus"></div>
+
+      <div id="quickEditCard" class="panel quick-edit" style="display:none">
+        <h2>Quick Edit Generated Image</h2>
+        <div class="hint" id="selectedGeneratedInfo">No generated image selected.</div>
+        <textarea id="quickEditPrompt" placeholder="Describe the changes you want while keeping the same composition/subject."></textarea>
+        <div class="row">
+          <label for="quickEditReferenceImages">Edit guidance images (optional):</label>
+          <input id="quickEditReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+          <button id="clearQuickEditReferences" class="secondary" type="button">Clear quick edit refs</button>
+        </div>
+        <div class="hint" id="quickEditReferenceSummary">No edit guidance images selected.</div>
+        <div class="row">
+          <button id="quickEdit" type="button">Create Variation</button>
+          <a id="quickDownload" class="download" href="#" download="dall-e-goblin-image.png">Download Selected</a>
+        </div>
+      </div>
+
+      <div class="canvas">
+        <img id="preview" alt="Selected generated image preview" />
+      </div>
+      <div class="row">
+        <div class="hint">Create history: <span id="createHistoryCount">0/10</span></div>
+        <button id="clearCreateHistory" class="secondary" type="button">Clear generated images</button>
+      </div>
+      <div class="hint">Tip: click a thumbnail to select the generated image used by Quick Edit.</div>
+      <div class="history" id="createHistory"></div>
+    </section>
+
+    <section id="editPanel" class="panel tab-panel" style="display:none">
+      <h2>Edit Uploaded Image</h2>
+      <div class="row">
+        <label for="externalSourceImage">Image to edit:</label>
+        <input id="externalSourceImage" class="upload-input" type="file" accept="image/png,image/jpeg" />
+        <button id="clearExternalSourceImage" class="secondary" type="button">Clear source image</button>
+      </div>
+      <div class="hint" id="externalSourceSummary">No source image selected.</div>
+      <div class="canvas small">
+        <img id="externalPreview" alt="External source image preview" />
+      </div>
+      <textarea id="externalEditPrompt" placeholder="Describe the edit to apply to your uploaded image."></textarea>
+      <div class="row">
+        <label for="externalEditReferenceImages">Edit references (optional):</label>
+        <input id="externalEditReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
+        <button id="clearExternalEditReferences" class="secondary" type="button">Clear edit refs</button>
+      </div>
+      <div class="hint" id="externalEditReferenceSummary">No edit references selected.</div>
+        <div class="row">
+          <button id="externalEdit" type="button">Edit Uploaded Image</button>
+          <a id="externalDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Result</a>
+        </div>
+      <div class="status inline" id="editStatus"></div>
+      <div class="canvas">
+        <img id="externalResultPreview" alt="Edited uploaded image preview" />
+      </div>
+      <div class="row">
+        <div class="hint">Edit history: <span id="editHistoryCount">0/10</span></div>
+        <button id="clearEditHistory" class="secondary" type="button">Clear edit history</button>
+      </div>
+      <div class="history" id="editHistory"></div>
+    </section>
+
     <div class="hint">Supported sizes: 1024x1024, 1024x1536, 1536x1024.</div>
     <div class="hint">Compression applies to JPEG only. Your size/quality/format/compression selections are saved automatically.</div>
-    <div class="canvas">
-      <img id="preview" alt="Generated image preview" />
-    </div>
-    <div class="hint">Tip: click any thumbnail below to branch edits from an older version.</div>
-    <div class="history" id="history"></div>
+
+    <footer class="footer-note">
+      Dall-E Goblin is an independent tool and is not affiliated with, endorsed by, or sponsored by OpenAI. DALL·E is a trademark of OpenAI.
+    </footer>
   </main>
+
+  <div id="paywallModal" class="modal-overlay" style="display:none">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="paywallTitle">
+      <button id="paywallClose" class="modal-close" type="button" aria-label="Close">X</button>
+      <h2 id="paywallTitle">Choose how you want to continue</h2>
+      <p id="paywallMessage" class="hint">Add your own API key or join the subscription waitlist.</p>
+
+      <div id="paywallOptions" class="row">
+        <button id="paywallUseOwnKey" type="button">Use My Own API Key</button>
+        <button id="paywallSubscribeOption" type="button">Subscribe for Unlimited Usage</button>
+      </div>
+
+      <div id="paywallInterestForm" style="display:none">
+        <div class="row">
+          <label for="interestEmail">Email address:</label>
+          <input id="interestEmail" type="email" placeholder="you@example.com" />
+        </div>
+        <div class="row">
+          <label for="interestWillingness">How much would you be willing to pay per month for unlimited usage?</label>
+          <input id="interestWillingness" class="interest-amount-input" type="number" min="0" step="0.01" />
+        </div>
+        <div class="row">
+          <label for="interestComments">Any other comments?</label>
+          <textarea id="interestComments" placeholder="Optional feedback"></textarea>
+        </div>
+        <div class="hint" id="interestError"></div>
+        <div class="row">
+          <button id="interestSubmit" type="button">Submit</button>
+          <button id="interestBack" class="secondary" type="button">Back</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="contactModal" class="modal-overlay" style="display:none">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="contactTitle">
+      <button id="contactModalClose" class="modal-close" type="button" aria-label="Close">X</button>
+      <h2 id="contactTitle">Contact</h2>
+      <div class="row">
+        <label for="contactEmail">Email:</label>
+        <input id="contactEmail" type="email" placeholder="you@example.com" />
+      </div>
+      <div class="row">
+        <label for="contactMessage">Message:</label>
+        <textarea id="contactMessage" placeholder="Tell us what you need help with or what feature you want."></textarea>
+      </div>
+      <input id="contactWebsite" class="honeypot" type="text" autocomplete="off" tabindex="-1" aria-hidden="true" />
+      <div class="row">
+        <button id="contactSubmit" type="button">Send Message</button>
+      </div>
+      <div class="hint" id="contactStatus"></div>
+    </div>
+  </div>
 
   <script type="module" src="/app.js"></script>
 </body>

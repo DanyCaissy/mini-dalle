@@ -3,7 +3,7 @@ import {
   MAX_REFERENCE_IMAGES,
   OPENAI_IMAGE_MODEL
 } from "../config/constants.js";
-import { openai } from "./openaiClient.js";
+import { getOpenAIClient } from "./openaiClient.js";
 
 function createImageFileFromBase64(imageB64, mimeType, fileStem) {
   if (typeof imageB64 !== "string" || !imageB64.trim()) {
@@ -47,6 +47,7 @@ function parseReferenceImageFiles(referenceImages) {
 }
 
 export async function generateImage({
+  apiKey,
   prompt,
   size,
   quality,
@@ -54,6 +55,7 @@ export async function generateImage({
   output_compression,
   reference_images
 }) {
+  const openai = getOpenAIClient(apiKey);
   const referenceImageFiles = parseReferenceImageFiles(reference_images);
 
   let result;
@@ -94,6 +96,7 @@ export async function generateImage({
 }
 
 export async function editImage({
+  apiKey,
   prompt,
   size,
   quality,
@@ -103,6 +106,7 @@ export async function editImage({
   image_mime_type,
   reference_images
 }) {
+  const openai = getOpenAIClient(apiKey);
   const sourceMimeType = image_mime_type || "image/png";
   const imageFile = createImageFileFromBase64(image_b64, sourceMimeType, "source");
   const referenceImageFiles = parseReferenceImageFiles(reference_images);

@@ -43,8 +43,15 @@ h1 {
 .brand {
   display: flex;
   align-items: center;
-  gap: 14px;
+  justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
+}
+
+.brand-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .logo {
@@ -67,7 +74,7 @@ h1 {
 }
 
 h2 {
-  margin: 16px 0 8px;
+  margin: 0 0 10px;
   font-size: 17px;
 }
 
@@ -95,6 +102,46 @@ textarea {
   align-items: center;
   gap: 10px;
   margin-top: 12px;
+}
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 14px;
+}
+
+.tab {
+  border-color: var(--border);
+  background: #fff;
+  color: var(--ink);
+}
+
+.tab.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  background: #fff;
+  margin-top: 12px;
+}
+
+.tab-panel {
+  background: #fffdfa;
+}
+
+.settings {
+  background: #faf8f3;
+}
+
+.quick-edit {
+  margin-top: 16px;
+  border-color: #b9d8cd;
+  background: #f4fbf7;
 }
 
 label {
@@ -155,6 +202,10 @@ button:disabled {
   font-size: 14px;
 }
 
+.status.inline {
+  margin-top: 6px;
+}
+
 .canvas {
   margin-top: 14px;
   border: 1px dashed var(--border);
@@ -166,7 +217,14 @@ button:disabled {
   place-items: center;
 }
 
-#preview {
+.canvas.small {
+  min-height: 90px;
+  max-width: 260px;
+}
+
+#preview,
+#externalPreview,
+#externalResultPreview {
   max-width: 100%;
   display: none;
 }
@@ -179,6 +237,7 @@ button:disabled {
 }
 
 .thumb {
+  position: relative;
   border: 2px solid transparent;
   border-radius: 10px;
   overflow: hidden;
@@ -189,6 +248,21 @@ button:disabled {
 
 .thumb.active {
   border-color: var(--accent);
+}
+
+.thumb-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.95);
+  color: #2d2925;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
 }
 
 .thumb img {
@@ -207,4 +281,78 @@ button:disabled {
 .upload-input {
   max-width: 300px;
   background: #fff;
+}
+
+.api-key-input {
+  min-width: min(420px, 100%);
+  flex: 1 1 320px;
+}
+
+.saved-key {
+  color: #4d463f;
+  background: #f3eee6;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.interest-amount-input {
+  min-width: min(280px, 100%);
+  flex: 1 1 280px;
+}
+
+#contactEmail,
+#contactMessage {
+  width: min(560px, 100%);
+}
+
+.honeypot {
+  position: absolute !important;
+  left: -9999px !important;
+  top: auto !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 10, 8, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 999;
+}
+
+.modal-card {
+  width: min(680px, 100%);
+  background: #fffdf9;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  border-color: var(--border);
+  background: #fff;
+  color: var(--ink);
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  padding: 0;
+}
+
+.footer-note {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
 }

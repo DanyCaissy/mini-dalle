@@ -1,50 +1,219 @@
+const MAX_IMAGES_PER_TAB = 10;
+const DB_NAME = "dalle-goblin";
+const DB_VERSION = 1;
+const CREATE_STORE = "create_history";
+const EDIT_STORE = "edit_history";
+
+const tabCreateEl = document.getElementById("tabCreate");
+const tabEditEl = document.getElementById("tabEdit");
+const createPanelEl = document.getElementById("createPanel");
+const editPanelEl = document.getElementById("editPanel");
+
 const promptEl = document.getElementById("prompt");
-const editPromptEl = document.getElementById("editPrompt");
-const editSectionEl = document.getElementById("editSection");
+const quickEditPromptEl = document.getElementById("quickEditPrompt");
+const externalEditPromptEl = document.getElementById("externalEditPrompt");
+
 const sizeEl = document.getElementById("size");
 const qualityEl = document.getElementById("quality");
 const formatEl = document.getElementById("format");
 const compressionEl = document.getElementById("compression");
+const userApiKeyEl = document.getElementById("userApiKey");
+const saveUserApiKeyBtn = document.getElementById("saveUserApiKey");
+const clearUserApiKeyBtn = document.getElementById("clearUserApiKey");
+const editUserApiKeyBtn = document.getElementById("editUserApiKey");
+const savedApiKeyDisplayEl = document.getElementById("savedApiKeyDisplay");
+const apiKeyModeHintEl = document.getElementById("apiKeyModeHint");
+
 const generateBtn = document.getElementById("generate");
-const editBtn = document.getElementById("edit");
+const quickEditBtn = document.getElementById("quickEdit");
+const externalEditBtn = document.getElementById("externalEdit");
+
 const referenceImagesInputEl = document.getElementById("referenceImages");
 const clearReferencesBtn = document.getElementById("clearReferences");
 const referenceSummaryEl = document.getElementById("referenceSummary");
-const editReferenceImagesInputEl = document.getElementById("editReferenceImages");
-const clearEditReferencesBtn = document.getElementById("clearEditReferences");
-const editReferenceSummaryEl = document.getElementById("editReferenceSummary");
-const statusEl = document.getElementById("status");
-const previewEl = document.getElementById("preview");
-const downloadEl = document.getElementById("download");
-const historyEl = document.getElementById("history");
 
-const imageHistory = [];
+const quickEditReferenceImagesInputEl = document.getElementById("quickEditReferenceImages");
+const clearQuickEditReferencesBtn = document.getElementById("clearQuickEditReferences");
+const quickEditReferenceSummaryEl = document.getElementById("quickEditReferenceSummary");
+
+const externalSourceImageInputEl = document.getElementById("externalSourceImage");
+const clearExternalSourceImageBtn = document.getElementById("clearExternalSourceImage");
+const externalSourceSummaryEl = document.getElementById("externalSourceSummary");
+const externalPreviewEl = document.getElementById("externalPreview");
+
+const externalEditReferenceImagesInputEl = document.getElementById("externalEditReferenceImages");
+const clearExternalEditReferencesBtn = document.getElementById("clearExternalEditReferences");
+const externalEditReferenceSummaryEl = document.getElementById("externalEditReferenceSummary");
+const externalResultPreviewEl = document.getElementById("externalResultPreview");
+
+const quickEditCardEl = document.getElementById("quickEditCard");
+const selectedGeneratedInfoEl = document.getElementById("selectedGeneratedInfo");
+const createStatusEl = document.getElementById("createStatus");
+const editStatusEl = document.getElementById("editStatus");
+const previewEl = document.getElementById("preview");
+const createHistoryEl = document.getElementById("createHistory");
+const editHistoryEl = document.getElementById("editHistory");
+const createHistoryCountEl = document.getElementById("createHistoryCount");
+const editHistoryCountEl = document.getElementById("editHistoryCount");
+const clearCreateHistoryBtn = document.getElementById("clearCreateHistory");
+const clearEditHistoryBtn = document.getElementById("clearEditHistory");
+const quickDownloadEl = document.getElementById("quickDownload");
+const externalDownloadEl = document.getElementById("externalDownload");
+const paywallModalEl = document.getElementById("paywallModal");
+const paywallCloseEl = document.getElementById("paywallClose");
+const paywallMessageEl = document.getElementById("paywallMessage");
+const paywallOptionsEl = document.getElementById("paywallOptions");
+const paywallUseOwnKeyEl = document.getElementById("paywallUseOwnKey");
+const paywallSubscribeOptionEl = document.getElementById("paywallSubscribeOption");
+const paywallInterestFormEl = document.getElementById("paywallInterestForm");
+const interestEmailEl = document.getElementById("interestEmail");
+const interestWillingnessEl = document.getElementById("interestWillingness");
+const interestCommentsEl = document.getElementById("interestComments");
+const interestErrorEl = document.getElementById("interestError");
+const interestSubmitEl = document.getElementById("interestSubmit");
+const interestBackEl = document.getElementById("interestBack");
+const contactEmailEl = document.getElementById("contactEmail");
+const contactMessageEl = document.getElementById("contactMessage");
+const contactWebsiteEl = document.getElementById("contactWebsite");
+const contactSubmitEl = document.getElementById("contactSubmit");
+const contactStatusEl = document.getElementById("contactStatus");
+const openContactModalEl = document.getElementById("openContactModal");
+const contactModalEl = document.getElementById("contactModal");
+const contactModalCloseEl = document.getElementById("contactModalClose");
+
 const allowedSourceMimeTypes = new Set(["image/jpeg", "image/png"]);
-let referenceImages = [];
-let editReferenceImages = [];
-let selectedId = null;
+const createHistory = [];
+const editHistory = [];
+
+let selectedCreateId = null;
+let selectedEditId = null;
+let createReferenceImages = [];
+let quickEditReferenceImages = [];
+let externalEditReferenceImages = [];
+let externalSourceImage = null;
+let isEditingSavedApiKey = false;
+let previousQualityValue = "low";
+
 const SETTINGS_STORAGE_KEY = "mini-dalle-settings-v1";
+const USER_API_KEY_STORAGE_KEY = "dalle-goblin-user-api-key";
+
+let dbPromise = null;
+
+function activeStatusScope() {
+  return editPanelEl.style.display === "none" ? "create" : "edit";
+}
+
+function setStatus(message, scope = "auto") {
+  const resolvedScope = scope === "auto" ? activeStatusScope() : scope;
+  if (resolvedScope === "edit") {
+    editStatusEl.textContent = message;
+  } else {
+    createStatusEl.textContent = message;
+  }
+}
+
+function openDB() {
+  if (!dbPromise) {
+    dbPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(CREATE_STORE)) {
+          db.createObjectStore(CREATE_STORE, { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains(EDIT_STORE)) {
+          db.createObjectStore(EDIT_STORE, { keyPath: "id" });
+        }
+      };
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error || new Error("Failed to open IndexedDB"));
+    });
+  }
+  return dbPromise;
+}
+
+async function dbGetAll(storeName) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const store = tx.objectStore(storeName);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error || new Error("Failed to read history"));
+  });
+}
+
+async function dbReplaceAll(storeName, items) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    const store = tx.objectStore(storeName);
+    const clearReq = store.clear();
+    clearReq.onerror = () => reject(clearReq.error || new Error("Failed to clear store"));
+    clearReq.onsuccess = () => {
+      for (const item of items) {
+        store.put(item);
+      }
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error("Failed to write history"));
+  });
+}
+
+async function dbAddCapped(storeName, item) {
+  const all = await dbGetAll(storeName);
+  const next = all.filter((it) => String(it.id) !== String(item.id));
+  next.unshift(item);
+  if (next.length > MAX_IMAGES_PER_TAB) {
+    next.length = MAX_IMAGES_PER_TAB;
+  }
+  await dbReplaceAll(storeName, next);
+}
+
+async function dbDeleteById(storeName, id) {
+  const all = await dbGetAll(storeName);
+  const next = all.filter((it) => String(it.id) !== String(id));
+  await dbReplaceAll(storeName, next);
+}
+
+async function dbClearStore(storeName) {
+  await dbReplaceAll(storeName, []);
+}
+
+function switchTab(mode) {
+  const createActive = mode === "create";
+  createPanelEl.style.display = createActive ? "block" : "none";
+  editPanelEl.style.display = createActive ? "none" : "block";
+  tabCreateEl.classList.toggle("active", createActive);
+  tabEditEl.classList.toggle("active", !createActive);
+  tabCreateEl.setAttribute("aria-selected", createActive ? "true" : "false");
+  tabEditEl.setAttribute("aria-selected", createActive ? "false" : "true");
+}
 
 function setButtons(disabled) {
   generateBtn.disabled = disabled;
-  editBtn.disabled = disabled;
+  quickEditBtn.disabled = disabled;
+  externalEditBtn.disabled = disabled;
 }
 
-function setEditUIVisible(visible) {
-  editSectionEl.style.display = visible ? "block" : "none";
-  editBtn.style.display = visible ? "inline-block" : "none";
-}
-
-function getSelectedSize() {
+function getSelectedRenderSettings() {
   const size = sizeEl.value;
-  const allowed = new Set(["1024x1024", "1024x1536", "1536x1024"]);
-  if (!allowed.has(size)) {
-    return {
-      size: null,
-      error: "Unsupported size. Use 1024x1024, 1024x1536, or 1536x1024."
-    };
+  const quality = qualityEl.value;
+  const output_format = formatEl.value;
+  const output_compression = Number.parseInt(compressionEl.value, 10);
+
+  const allowedSizes = new Set(["1024x1024", "1024x1536", "1536x1024"]);
+  const allowedQualities = new Set(["low", "medium", "high"]);
+  const allowedFormats = new Set(["jpeg", "png"]);
+
+  if (!allowedSizes.has(size)) return { settings: null, error: "Unsupported size selected." };
+  if (!allowedQualities.has(quality)) return { settings: null, error: "Unsupported quality selected." };
+  if (!allowedFormats.has(output_format)) return { settings: null, error: "Unsupported format selected." };
+  if (!Number.isInteger(output_compression) || output_compression < 0 || output_compression > 100) {
+    return { settings: null, error: "Compression must be an integer from 0 to 100." };
   }
-  return { size, error: null };
+
+  return { settings: { size, quality, output_format, output_compression }, error: null };
 }
 
 function saveSettings() {
@@ -55,6 +224,89 @@ function saveSettings() {
     output_compression: compressionEl.value
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+}
+
+function getUserApiKey() {
+  const stored = localStorage.getItem(USER_API_KEY_STORAGE_KEY);
+  if (typeof stored !== "string") return null;
+  const trimmed = stored.trim();
+  return trimmed || null;
+}
+
+function isUsingOwnApiKey() {
+  return Boolean(getUserApiKey());
+}
+
+function canUseHighQuality() {
+  return isUsingOwnApiKey();
+}
+
+function maskApiKey(key) {
+  const normalized = String(key || "").trim();
+  if (!normalized) return "";
+  if (normalized.length <= 10) {
+    return normalized.slice(0, 3) + "..." + normalized.slice(-2);
+  }
+  return normalized.slice(0, 6) + "..." + normalized.slice(-4);
+}
+
+function setApiKeySavedState(saved) {
+  const showInput = !saved || isEditingSavedApiKey;
+  userApiKeyEl.style.display = showInput ? "inline-block" : "none";
+  saveUserApiKeyBtn.style.display = showInput ? "inline-block" : "none";
+  clearUserApiKeyBtn.style.display = saved ? "inline-block" : "none";
+  savedApiKeyDisplayEl.style.display = saved ? "inline-block" : "none";
+  editUserApiKeyBtn.style.display = saved && !isEditingSavedApiKey ? "inline-block" : "none";
+}
+
+function updateApiKeyModeHint() {
+  const key = getUserApiKey();
+  apiKeyModeHintEl.textContent = key
+    ? "Using your own API key for requests."
+    : "Using free server key (2 requests available).";
+}
+
+function loadUserApiKey() {
+  const raw = localStorage.getItem(USER_API_KEY_STORAGE_KEY);
+  isEditingSavedApiKey = false;
+  if (typeof raw === "string" && raw.trim()) {
+    const masked = maskApiKey(raw);
+    savedApiKeyDisplayEl.textContent = "Saved key: " + masked;
+    userApiKeyEl.value = "";
+    setApiKeySavedState(true);
+  } else {
+    userApiKeyEl.value = "";
+    savedApiKeyDisplayEl.textContent = "";
+    setApiKeySavedState(false);
+  }
+  updateApiKeyModeHint();
+}
+
+function saveUserApiKeyFromInput() {
+  const key = typeof userApiKeyEl.value === "string" ? userApiKeyEl.value.trim() : "";
+  const existing = localStorage.getItem(USER_API_KEY_STORAGE_KEY);
+
+  if (!key) {
+    if (existing && isEditingSavedApiKey) {
+      isEditingSavedApiKey = false;
+      userApiKeyEl.value = "";
+      setApiKeySavedState(true);
+      return;
+    }
+    localStorage.removeItem(USER_API_KEY_STORAGE_KEY);
+    savedApiKeyDisplayEl.textContent = "";
+    isEditingSavedApiKey = false;
+    setApiKeySavedState(false);
+    updateApiKeyModeHint();
+    return;
+  }
+
+  localStorage.setItem(USER_API_KEY_STORAGE_KEY, key);
+  savedApiKeyDisplayEl.textContent = "Saved key: " + maskApiKey(key);
+  userApiKeyEl.value = "";
+  isEditingSavedApiKey = false;
+  setApiKeySavedState(true);
+  updateApiKeyModeHint();
 }
 
 function loadSettings() {
@@ -73,61 +325,182 @@ function loadSettings() {
   }
 }
 
-function getSelectedRenderSettings() {
-  const { size, error: sizeError } = getSelectedSize();
-  if (!size) {
-    return { settings: null, error: sizeError };
-  }
-  const quality = qualityEl.value;
-  const output_format = formatEl.value;
-  const output_compression = Number.parseInt(compressionEl.value, 10);
-  const allowedQualities = new Set(["low", "medium", "high"]);
-  const allowedFormats = new Set(["jpeg", "png"]);
-
-  if (!allowedQualities.has(quality)) {
-    return { settings: null, error: "Unsupported quality. Use low, medium, or high." };
-  }
-  if (!allowedFormats.has(output_format)) {
-    return { settings: null, error: "Unsupported format. Use jpeg or png." };
-  }
-  if (!Number.isInteger(output_compression) || output_compression < 0 || output_compression > 100) {
-    return { settings: null, error: "Compression must be an integer from 0 to 100." };
-  }
-
-  return {
-    settings: { size, quality, output_format, output_compression },
-    error: null
-  };
-}
-
 function getFileExtensionFromMimeType(mimeType) {
   if (mimeType === "image/jpeg") return "jpg";
   if (mimeType === "image/png") return "png";
   return "bin";
 }
 
-function renderReferenceSummary() {
-  if (!referenceImages.length) {
-    referenceSummaryEl.textContent = "No reference images selected.";
-    return;
-  }
-
-  const names = referenceImages.map((file) => file.name).join(", ");
-  referenceSummaryEl.textContent = "Using " + referenceImages.length + " reference image(s): " + names;
+function setDownloadLink(anchorEl, b64, mimeType, baseName) {
+  const dataUrl = "data:" + mimeType + ";base64," + b64;
+  anchorEl.href = dataUrl;
+  anchorEl.download = baseName + "." + getFileExtensionFromMimeType(mimeType);
+  anchorEl.style.display = "inline-block";
 }
 
-function renderEditReferenceSummary() {
-  if (!editReferenceImages.length) {
-    editReferenceSummaryEl.textContent = "No edit reference images selected.";
+function updateSelectedGeneratedInfo(item) {
+  if (!item) {
+    selectedGeneratedInfoEl.textContent = "No generated image selected.";
+    quickEditCardEl.style.display = "none";
     return;
   }
-
-  const names = editReferenceImages.map((file) => file.name).join(", ");
-  editReferenceSummaryEl.textContent =
-    "Using " + editReferenceImages.length + " edit reference image(s): " + names;
+  const snippet = item.originPrompt ? item.originPrompt.slice(0, 90) : "Generated image";
+  selectedGeneratedInfoEl.textContent = "Selected image: " + snippet;
+  quickEditCardEl.style.display = "block";
 }
 
-function readFileAsBase64(file) {
+function renderSummary(targetEl, files, emptyText, prefixText) {
+  if (!files.length) {
+    targetEl.textContent = emptyText;
+    return;
+  }
+  const names = files.map((f) => f.name).join(", ");
+  targetEl.textContent = prefixText + files.length + ": " + names;
+}
+
+function createHistoryEntry({ b64, mimeType, prompt, parentId }) {
+  return {
+    id: Date.now() + Math.floor(Math.random() * 100000),
+    b64,
+    mimeType,
+    originPrompt: prompt || "",
+    parentId: parentId ?? null,
+    createdAt: new Date().toISOString()
+  };
+}
+
+function renderCounter(counterEl, count) {
+  counterEl.textContent = count + "/" + MAX_IMAGES_PER_TAB;
+}
+
+function renderHistoryList(containerEl, items, onSelect, onDelete, selectedId) {
+  containerEl.innerHTML = "";
+  for (const item of items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "thumb";
+    button.dataset.id = String(item.id);
+    button.title = item.originPrompt || "Image";
+
+    const img = document.createElement("img");
+    img.alt = "Thumbnail";
+    img.src = "data:" + item.mimeType + ";base64," + item.b64;
+    button.appendChild(img);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "thumb-delete";
+    deleteBtn.title = "Delete this image";
+    deleteBtn.textContent = "X";
+    deleteBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      void onDelete(item.id);
+    });
+    button.appendChild(deleteBtn);
+
+    button.addEventListener("click", () => onSelect(item.id));
+    button.classList.toggle("active", String(item.id) === String(selectedId));
+    containerEl.appendChild(button);
+  }
+}
+
+function selectCreateImage(id) {
+  selectedCreateId = id;
+  const item = createHistory.find((entry) => String(entry.id) === String(id));
+  if (!item) {
+    previewEl.removeAttribute("src");
+    previewEl.style.display = "none";
+    quickDownloadEl.style.display = "none";
+    updateSelectedGeneratedInfo(null);
+    return;
+  }
+  previewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
+  previewEl.style.display = "block";
+  setDownloadLink(quickDownloadEl, item.b64, item.mimeType, "dall-e-goblin-image");
+  updateSelectedGeneratedInfo(item);
+  renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
+}
+
+function selectEditImage(id) {
+  selectedEditId = id;
+  const item = editHistory.find((entry) => String(entry.id) === String(id));
+  if (!item) {
+    externalResultPreviewEl.removeAttribute("src");
+    externalResultPreviewEl.style.display = "none";
+    externalDownloadEl.style.display = "none";
+    return;
+  }
+  externalResultPreviewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
+  externalResultPreviewEl.style.display = "block";
+  setDownloadLink(externalDownloadEl, item.b64, item.mimeType, "dall-e-goblin-edit");
+  renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
+}
+
+async function addCreateHistoryItem(item) {
+  await dbAddCapped(CREATE_STORE, item);
+  createHistory.unshift(item);
+  if (createHistory.length > MAX_IMAGES_PER_TAB) createHistory.length = MAX_IMAGES_PER_TAB;
+  renderCounter(createHistoryCountEl, createHistory.length);
+  renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
+  selectCreateImage(item.id);
+}
+
+async function addEditHistoryItem(item) {
+  await dbAddCapped(EDIT_STORE, item);
+  editHistory.unshift(item);
+  if (editHistory.length > MAX_IMAGES_PER_TAB) editHistory.length = MAX_IMAGES_PER_TAB;
+  renderCounter(editHistoryCountEl, editHistory.length);
+  renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
+  selectEditImage(item.id);
+}
+
+async function deleteCreateImage(id) {
+  if (!confirm("Delete this create image?")) return;
+  await dbDeleteById(CREATE_STORE, id);
+  const index = createHistory.findIndex((it) => String(it.id) === String(id));
+  if (index >= 0) createHistory.splice(index, 1);
+  renderCounter(createHistoryCountEl, createHistory.length);
+  renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
+  if (String(selectedCreateId) === String(id)) {
+    if (createHistory.length) selectCreateImage(createHistory[0].id);
+    else selectCreateImage(null);
+  }
+}
+
+async function deleteEditImage(id) {
+  if (!confirm("Delete this edit image?")) return;
+  await dbDeleteById(EDIT_STORE, id);
+  const index = editHistory.findIndex((it) => String(it.id) === String(id));
+  if (index >= 0) editHistory.splice(index, 1);
+  renderCounter(editHistoryCountEl, editHistory.length);
+  renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
+  if (String(selectedEditId) === String(id)) {
+    if (editHistory.length) selectEditImage(editHistory[0].id);
+    else selectEditImage(null);
+  }
+}
+
+async function clearCreateHistory() {
+  if (!confirm("Clear all create history?")) return;
+  await dbClearStore(CREATE_STORE);
+  createHistory.splice(0, createHistory.length);
+  renderCounter(createHistoryCountEl, 0);
+  renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
+  selectCreateImage(null);
+  setStatus("Create history cleared.", "create");
+}
+
+async function clearEditHistory() {
+  if (!confirm("Clear all edit history?")) return;
+  await dbClearStore(EDIT_STORE);
+  editHistory.splice(0, editHistory.length);
+  renderCounter(editHistoryCountEl, 0);
+  renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
+  selectEditImage(null);
+  setStatus("Edit history cleared.", "edit");
+}
+
+async function readFileAsBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -140,119 +513,20 @@ function readFileAsBase64(file) {
   });
 }
 
-async function updateReferenceImagesFromInput() {
-  const files = Array.from(referenceImagesInputEl.files || []);
-  if (files.length > 4) {
-    referenceImages = [];
-    referenceImagesInputEl.value = "";
-    renderReferenceSummary();
-    throw new Error("You can upload up to 4 reference images.");
-  }
-
-  const next = [];
+async function filesToPayload(files, label) {
+  if (files.length > 4) throw new Error("You can upload up to 4 " + label + ".");
+  const out = [];
   for (const file of files) {
     if (!allowedSourceMimeTypes.has(file.type)) {
-      referenceImages = [];
-      referenceImagesInputEl.value = "";
-      renderReferenceSummary();
       throw new Error("Unsupported file type for " + file.name + ". Use PNG or JPEG.");
     }
-    next.push({
+    out.push({
       name: file.name,
       mime_type: file.type,
       b64: await readFileAsBase64(file)
     });
   }
-
-  referenceImages = next;
-  renderReferenceSummary();
-}
-
-async function updateEditReferenceImagesFromInput() {
-  const files = Array.from(editReferenceImagesInputEl.files || []);
-  if (files.length > 4) {
-    editReferenceImages = [];
-    editReferenceImagesInputEl.value = "";
-    renderEditReferenceSummary();
-    throw new Error("You can upload up to 4 edit reference images.");
-  }
-
-  const next = [];
-  for (const file of files) {
-    if (!allowedSourceMimeTypes.has(file.type)) {
-      editReferenceImages = [];
-      editReferenceImagesInputEl.value = "";
-      renderEditReferenceSummary();
-      throw new Error("Unsupported file type for " + file.name + ". Use PNG or JPEG.");
-    }
-    next.push({
-      name: file.name,
-      mime_type: file.type,
-      b64: await readFileAsBase64(file)
-    });
-  }
-
-  editReferenceImages = next;
-  renderEditReferenceSummary();
-}
-
-function normalizeHistoryEntry(entry) {
-  return {
-    id: entry.id,
-    b64: entry.b64,
-    mimeType: entry.mime_type || entry.mimeType || "image/png",
-    originPrompt: entry.origin_prompt || entry.originPrompt || "",
-    parentId: entry.parent_id ?? entry.parentId ?? null
-  };
-}
-
-function renderHistory() {
-  historyEl.innerHTML = "";
-  for (const item of imageHistory) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "thumb";
-    button.dataset.id = String(item.id);
-    button.title = item.originPrompt || "Generated image";
-
-    const img = document.createElement("img");
-    img.alt = "Generated thumbnail";
-    img.src = "data:" + (item.mimeType || "image/png") + ";base64," + item.b64;
-    button.appendChild(img);
-    button.addEventListener("click", () => selectImage(item.id));
-
-    historyEl.appendChild(button);
-  }
-}
-
-function selectImage(id) {
-  selectedId = id;
-  const item = imageHistory.find((entry) => entry.id === id);
-  if (!item) return;
-
-  setEditUIVisible(true);
-  const mimeType = item.mimeType || "image/png";
-  const imageDataUrl = "data:" + mimeType + ";base64," + item.b64;
-  previewEl.src = imageDataUrl;
-  previewEl.style.display = "block";
-  downloadEl.href = imageDataUrl;
-  downloadEl.download = "mini-dalle-image." + getFileExtensionFromMimeType(mimeType);
-  downloadEl.style.display = "inline-block";
-
-  for (const thumb of historyEl.querySelectorAll(".thumb")) {
-    thumb.classList.toggle("active", thumb.dataset.id === String(id));
-  }
-}
-
-function addToHistory(entry) {
-  const item = normalizeHistoryEntry(entry);
-  const existingIndex = imageHistory.findIndex((it) => it.id === item.id);
-  if (existingIndex >= 0) {
-    imageHistory.splice(existingIndex, 1);
-  }
-  imageHistory.unshift(item);
-  renderHistory();
-  selectImage(item.id);
+  return out;
 }
 
 async function requestJSON(path, payload, method = "POST") {
@@ -263,135 +537,501 @@ async function requestJSON(path, payload, method = "POST") {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || "Request failed");
+    const error = new Error(data.error || "Request failed");
+    error.code = data.code || null;
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
 
-async function loadHistory() {
-  try {
-    const data = await requestJSON("/api/history", undefined, "GET");
-    const normalized = Array.isArray(data.items) ? data.items.map(normalizeHistoryEntry) : [];
-    imageHistory.splice(0, imageHistory.length, ...normalized);
-    renderHistory();
-    if (imageHistory.length) {
-      selectImage(imageHistory[0].id);
-    }
-  } catch (error) {
-    statusEl.textContent = "Error loading history: " + (error?.message || "Unknown error");
-  }
+function openPaywallModal(message, reasonEventType) {
+  paywallMessageEl.textContent = message;
+  paywallInterestFormEl.style.display = "none";
+  paywallOptionsEl.style.display = "flex";
+  paywallModalEl.style.display = "grid";
+  void requestJSON("/api/interest/event", { event_type: reasonEventType || "paywall_shown" }).catch(() => {});
+}
+
+function closePaywallModal() {
+  paywallModalEl.style.display = "none";
+}
+
+function openContactModal() {
+  contactStatusEl.textContent = "";
+  contactModalEl.style.display = "grid";
+}
+
+function closeContactModal() {
+  contactModalEl.style.display = "none";
+}
+
+async function loadHistoriesFromDB() {
+  const [createItems, editItems] = await Promise.all([dbGetAll(CREATE_STORE), dbGetAll(EDIT_STORE)]);
+  createItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  editItems.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  createHistory.splice(0, createHistory.length, ...createItems.slice(0, MAX_IMAGES_PER_TAB));
+  editHistory.splice(0, editHistory.length, ...editItems.slice(0, MAX_IMAGES_PER_TAB));
+
+  renderCounter(createHistoryCountEl, createHistory.length);
+  renderCounter(editHistoryCountEl, editHistory.length);
+
+  renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
+  renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
+
+  if (createHistory.length) selectCreateImage(createHistory[0].id);
+  else selectCreateImage(null);
+
+  if (editHistory.length) selectEditImage(editHistory[0].id);
+  else selectEditImage(null);
 }
 
 async function generateImage() {
   const prompt = promptEl.value.trim();
   const { settings, error } = getSelectedRenderSettings();
-
-  if (!prompt) {
-    statusEl.textContent = "Please enter a base prompt.";
-    return;
-  }
-  if (!settings) {
-    statusEl.textContent = error;
+  if (!prompt) return setStatus("Please enter a base prompt.", "create");
+  if (!settings) return setStatus(error, "create");
+  if (!canUseHighQuality() && settings.quality === "high") {
+    openPaywallModal(
+      "High quality generation is available when you use your own API key or choose subscription.",
+      "paywall_shown_high_quality_locked"
+    );
     return;
   }
 
   saveSettings();
   setButtons(true);
-  statusEl.textContent = "Generating image...";
+  setStatus("Generating image...", "create");
 
   try {
     const payload = { prompt, ...settings };
-    if (referenceImages.length) {
-      payload.reference_images = referenceImages;
-    }
-
+    const userApiKey = getUserApiKey();
+    if (userApiKey) payload.user_api_key = userApiKey;
+    if (createReferenceImages.length) payload.reference_images = createReferenceImages;
     const data = await requestJSON("/api/generate", payload);
-    addToHistory(data.history_item || { b64: data.b64, mime_type: data.mime_type, origin_prompt: prompt });
-    statusEl.textContent = "Done.";
+
+    const mimeType = data.mime_type || "image/png";
+    const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: null });
+    await addCreateHistoryItem(entry);
+    setStatus("Base image created. (" + createHistory.length + "/" + MAX_IMAGES_PER_TAB + ")", "create");
   } catch (requestError) {
-    statusEl.textContent = "Error: " + (requestError?.message || "Unknown error");
+    if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
+      openPaywallModal(
+        "Your free usage is over. Add your own API key or choose subscription.",
+        "paywall_shown_trial_expired"
+      );
+    }
+    if (requestError?.code === "INVALID_USER_API_KEY") {
+      alert("Your API key is invalid. Please update it.");
+      userApiKeyEl.focus();
+    }
+    setStatus("Error: " + (requestError?.message || "Unknown error"), "create");
   } finally {
     setButtons(false);
   }
 }
 
-async function editImage() {
-  const prompt = editPromptEl.value.trim();
+async function quickEditGeneratedImage() {
+  const prompt = quickEditPromptEl.value.trim();
   const { settings, error } = getSelectedRenderSettings();
-  const base = imageHistory.find((entry) => entry.id === selectedId);
+  const base = createHistory.find((entry) => String(entry.id) === String(selectedCreateId));
 
-  if (!base) {
-    statusEl.textContent = "Generate an image first, then select one to edit.";
-    return;
-  }
-  if (!settings) {
-    statusEl.textContent = error;
-    return;
-  }
-  if (!prompt) {
-    statusEl.textContent = "Please enter what you want to change.";
+  if (!base) return setStatus("Select a generated image first.", "create");
+  if (!prompt) return setStatus("Please enter a quick edit prompt.", "create");
+  if (!settings) return setStatus(error, "create");
+  if (!canUseHighQuality() && settings.quality === "high") {
+    openPaywallModal(
+      "High quality generation is available when you use your own API key or choose subscription.",
+      "paywall_shown_high_quality_locked"
+    );
     return;
   }
 
   saveSettings();
   setButtons(true);
-  statusEl.textContent = "Editing image...";
+  setStatus("Creating variation...", "create");
 
   try {
     const payload = {
       prompt,
       ...settings,
       image_b64: base.b64,
-      image_mime_type: base.mimeType || "image/png",
+      image_mime_type: base.mimeType,
       parent_id: base.id
     };
-    if (editReferenceImages.length) {
-      payload.reference_images = editReferenceImages;
-    }
-
+    const userApiKey = getUserApiKey();
+    if (userApiKey) payload.user_api_key = userApiKey;
+    if (quickEditReferenceImages.length) payload.reference_images = quickEditReferenceImages;
     const data = await requestJSON("/api/edit", payload);
-    addToHistory(data.history_item || { b64: data.b64, mime_type: data.mime_type, origin_prompt: prompt });
-    statusEl.textContent = "Edit complete.";
+
+    const mimeType = data.mime_type || "image/png";
+    const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: base.id });
+    await addCreateHistoryItem(entry);
+    setStatus("Variation created. (" + createHistory.length + "/" + MAX_IMAGES_PER_TAB + ")", "create");
   } catch (requestError) {
-    statusEl.textContent = "Error: " + (requestError?.message || "Unknown error");
+    if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
+      openPaywallModal(
+        "Your free usage is over. Add your own API key or choose subscription.",
+        "paywall_shown_trial_expired"
+      );
+    }
+    if (requestError?.code === "INVALID_USER_API_KEY") {
+      alert("Your API key is invalid. Please update it.");
+      userApiKeyEl.focus();
+    }
+    setStatus("Error: " + (requestError?.message || "Unknown error"), "create");
   } finally {
     setButtons(false);
   }
 }
 
+async function editUploadedImage() {
+  const prompt = externalEditPromptEl.value.trim();
+  const { settings, error } = getSelectedRenderSettings();
+
+  if (!externalSourceImage) return setStatus("Upload a source image to edit.", "edit");
+  if (!prompt) return setStatus("Please enter an edit prompt.", "edit");
+  if (!settings) return setStatus(error, "edit");
+  if (!canUseHighQuality() && settings.quality === "high") {
+    openPaywallModal(
+      "High quality generation is available when you use your own API key or choose subscription.",
+      "paywall_shown_high_quality_locked"
+    );
+    return;
+  }
+
+  saveSettings();
+  setButtons(true);
+  setStatus("Editing uploaded image...", "edit");
+
+  try {
+    const payload = {
+      prompt,
+      ...settings,
+      image_b64: externalSourceImage.b64,
+      image_mime_type: externalSourceImage.mime_type
+    };
+    const userApiKey = getUserApiKey();
+    if (userApiKey) payload.user_api_key = userApiKey;
+    if (externalEditReferenceImages.length) payload.reference_images = externalEditReferenceImages;
+    const data = await requestJSON("/api/edit", payload);
+
+    const mimeType = data.mime_type || "image/png";
+    const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: null });
+    await addEditHistoryItem(entry);
+
+    setStatus("Uploaded image edited. (" + editHistory.length + "/" + MAX_IMAGES_PER_TAB + ")", "edit");
+  } catch (requestError) {
+    if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
+      openPaywallModal(
+        "Your free usage is over. Add your own API key or choose subscription.",
+        "paywall_shown_trial_expired"
+      );
+    }
+    if (requestError?.code === "INVALID_USER_API_KEY") {
+      alert("Your API key is invalid. Please update it.");
+      userApiKeyEl.focus();
+    }
+    setStatus("Error: " + (requestError?.message || "Unknown error"), "edit");
+  } finally {
+    setButtons(false);
+  }
+}
+
+tabCreateEl.addEventListener("click", () => switchTab("create"));
+tabEditEl.addEventListener("click", () => switchTab("edit"));
+
 generateBtn.addEventListener("click", generateImage);
-editBtn.addEventListener("click", editImage);
+quickEditBtn.addEventListener("click", quickEditGeneratedImage);
+externalEditBtn.addEventListener("click", editUploadedImage);
+clearCreateHistoryBtn.addEventListener("click", () => void clearCreateHistory());
+clearEditHistoryBtn.addEventListener("click", () => void clearEditHistory());
+
 sizeEl.addEventListener("change", saveSettings);
-qualityEl.addEventListener("change", saveSettings);
 formatEl.addEventListener("change", saveSettings);
 compressionEl.addEventListener("change", saveSettings);
+qualityEl.addEventListener("change", () => {
+  const selected = qualityEl.value;
+  if (selected === "high" && !canUseHighQuality()) {
+    qualityEl.value = previousQualityValue === "high" ? "medium" : previousQualityValue;
+    saveSettings();
+    openPaywallModal(
+      "High quality generation is available when you use your own API key or choose subscription.",
+      "paywall_shown_high_quality_locked"
+    );
+    return;
+  }
+  previousQualityValue = qualityEl.value;
+  saveSettings();
+});
+saveUserApiKeyBtn.addEventListener("click", () => {
+  saveUserApiKeyFromInput();
+});
+editUserApiKeyBtn.addEventListener("click", () => {
+  isEditingSavedApiKey = true;
+  userApiKeyEl.value = "";
+  setApiKeySavedState(true);
+  userApiKeyEl.focus();
+});
+clearUserApiKeyBtn.addEventListener("click", () => {
+  if (!confirm("Clear your saved API key from this browser?")) {
+    return;
+  }
+  localStorage.removeItem(USER_API_KEY_STORAGE_KEY);
+  isEditingSavedApiKey = false;
+  userApiKeyEl.value = "";
+  savedApiKeyDisplayEl.textContent = "";
+  setApiKeySavedState(false);
+  updateApiKeyModeHint();
+});
+paywallCloseEl.addEventListener("click", closePaywallModal);
+paywallUseOwnKeyEl.addEventListener("click", async () => {
+  closePaywallModal();
+  await requestJSON("/api/interest/event", { event_type: "paywall_clicked_use_own_key" }).catch(() => {});
+  if (editUserApiKeyBtn.style.display !== "none") {
+    editUserApiKeyBtn.click();
+  } else {
+    userApiKeyEl.focus();
+  }
+});
+paywallSubscribeOptionEl.addEventListener("click", async () => {
+  await requestJSON("/api/interest/event", { event_type: "paywall_clicked_subscribe_option" }).catch(() => {});
+  paywallMessageEl.textContent = "This feature is being developed. Enter your email to be notified when it is available.";
+  paywallOptionsEl.style.display = "none";
+  paywallInterestFormEl.style.display = "block";
+});
+interestBackEl.addEventListener("click", () => {
+  interestErrorEl.textContent = "";
+  paywallMessageEl.textContent = "Add your own API key or join the subscription waitlist.";
+  paywallInterestFormEl.style.display = "none";
+  paywallOptionsEl.style.display = "flex";
+});
+async function submitInterestForm() {
+  const email = String(interestEmailEl.value || "").trim();
+  const willingness = String(interestWillingnessEl.value || "").trim();
+  const comments = String(interestCommentsEl.value || "").trim();
+  interestErrorEl.textContent = "";
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    interestErrorEl.textContent = "Please enter a valid email address.";
+    interestEmailEl.focus();
+    return;
+  }
+  if (willingness && Number.isNaN(Number(willingness))) {
+    interestErrorEl.textContent = "Please enter a valid numeric amount.";
+    interestWillingnessEl.focus();
+    return;
+  }
+  try {
+    await requestJSON("/api/interest/submit", { email, willingness, comments });
+    await requestJSON("/api/interest/event", { event_type: "paywall_interest_submitted" }).catch(() => {});
+    closePaywallModal();
+    setStatus("Thanks. We saved your subscription interest.", "edit");
+    interestEmailEl.value = "";
+    interestWillingnessEl.value = "";
+    interestCommentsEl.value = "";
+    interestErrorEl.textContent = "";
+  } catch (error) {
+    interestErrorEl.textContent = error?.message || "Failed to submit interest";
+  }
+}
+interestSubmitEl.addEventListener("click", () => {
+  void submitInterestForm();
+});
+interestEmailEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void submitInterestForm();
+  }
+});
+interestWillingnessEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void submitInterestForm();
+  }
+});
+
+contactSubmitEl.addEventListener("click", async () => {
+  const email = String(contactEmailEl.value || "").trim();
+  const message = String(contactMessageEl.value || "").trim();
+  const honeypot = String(contactWebsiteEl.value || "").trim();
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    contactStatusEl.textContent = "Please enter a valid email address.";
+    contactEmailEl.focus();
+    return;
+  }
+  if (!message || message.length < 5) {
+    contactStatusEl.textContent = "Please enter a message with at least 5 characters.";
+    contactMessageEl.focus();
+    return;
+  }
+
+  contactStatusEl.textContent = "Sending message...";
+  contactSubmitEl.disabled = true;
+  try {
+    await requestJSON("/api/contact", {
+      email,
+      message,
+      contact_website: honeypot
+    });
+    contactStatusEl.textContent = "Message sent. Thanks for reaching out.";
+    contactMessageEl.value = "";
+    setTimeout(() => {
+      closeContactModal();
+    }, 500);
+  } catch (error) {
+    if (error?.code === "CONTACT_RATE_LIMIT_EXCEEDED") {
+      contactStatusEl.textContent = "Contact limit reached for now. Please try again later.";
+    } else {
+      contactStatusEl.textContent = error?.message || "Failed to send contact message.";
+    }
+  } finally {
+    contactSubmitEl.disabled = false;
+  }
+});
+openContactModalEl.addEventListener("click", openContactModal);
+contactModalCloseEl.addEventListener("click", closeContactModal);
+
 referenceImagesInputEl.addEventListener("change", async () => {
   try {
-    await updateReferenceImagesFromInput();
+    createReferenceImages = await filesToPayload(Array.from(referenceImagesInputEl.files || []), "reference images");
+    renderSummary(referenceSummaryEl, createReferenceImages, "No reference images selected.", "Using reference images ");
   } catch (error) {
-    statusEl.textContent = "Error: " + (error?.message || "Invalid reference image");
+    createReferenceImages = [];
+    referenceImagesInputEl.value = "";
+    renderSummary(referenceSummaryEl, createReferenceImages, "No reference images selected.", "Using reference images ");
+    setStatus("Error: " + (error?.message || "Invalid reference image"), "create");
   }
 });
 clearReferencesBtn.addEventListener("click", () => {
-  referenceImages = [];
+  createReferenceImages = [];
   referenceImagesInputEl.value = "";
-  renderReferenceSummary();
+  renderSummary(referenceSummaryEl, createReferenceImages, "No reference images selected.", "Using reference images ");
 });
-editReferenceImagesInputEl.addEventListener("change", async () => {
+
+quickEditReferenceImagesInputEl.addEventListener("change", async () => {
   try {
-    await updateEditReferenceImagesFromInput();
+    quickEditReferenceImages = await filesToPayload(
+      Array.from(quickEditReferenceImagesInputEl.files || []),
+      "edit guidance images"
+    );
+    renderSummary(
+      quickEditReferenceSummaryEl,
+      quickEditReferenceImages,
+      "No edit guidance images selected.",
+      "Using edit guidance images "
+    );
   } catch (error) {
-    statusEl.textContent = "Error: " + (error?.message || "Invalid edit reference image");
+    quickEditReferenceImages = [];
+    quickEditReferenceImagesInputEl.value = "";
+    renderSummary(
+      quickEditReferenceSummaryEl,
+      quickEditReferenceImages,
+      "No edit guidance images selected.",
+      "Using edit guidance images "
+    );
+    setStatus("Error: " + (error?.message || "Invalid quick edit reference"), "create");
   }
 });
-clearEditReferencesBtn.addEventListener("click", () => {
-  editReferenceImages = [];
-  editReferenceImagesInputEl.value = "";
-  renderEditReferenceSummary();
+clearQuickEditReferencesBtn.addEventListener("click", () => {
+  quickEditReferenceImages = [];
+  quickEditReferenceImagesInputEl.value = "";
+  renderSummary(
+    quickEditReferenceSummaryEl,
+    quickEditReferenceImages,
+    "No edit guidance images selected.",
+    "Using edit guidance images "
+  );
+});
+
+externalSourceImageInputEl.addEventListener("change", async () => {
+  const files = Array.from(externalSourceImageInputEl.files || []);
+  if (!files.length) {
+    externalSourceImage = null;
+    externalPreviewEl.style.display = "none";
+    externalSourceSummaryEl.textContent = "No source image selected.";
+    return;
+  }
+  const file = files[0];
+  try {
+    if (!allowedSourceMimeTypes.has(file.type)) {
+      throw new Error("Unsupported source image type. Use PNG or JPEG.");
+    }
+    externalSourceImage = {
+      name: file.name,
+      mime_type: file.type,
+      b64: await readFileAsBase64(file)
+    };
+    externalPreviewEl.src = "data:" + file.type + ";base64," + externalSourceImage.b64;
+    externalPreviewEl.style.display = "block";
+    externalSourceSummaryEl.textContent = "Source image: " + file.name;
+  } catch (error) {
+    externalSourceImage = null;
+    externalSourceImageInputEl.value = "";
+    externalPreviewEl.style.display = "none";
+    externalSourceSummaryEl.textContent = "No source image selected.";
+    setStatus("Error: " + (error?.message || "Invalid source image"), "edit");
+  }
+});
+clearExternalSourceImageBtn.addEventListener("click", () => {
+  externalSourceImage = null;
+  externalSourceImageInputEl.value = "";
+  externalPreviewEl.style.display = "none";
+  externalSourceSummaryEl.textContent = "No source image selected.";
+});
+
+externalEditReferenceImagesInputEl.addEventListener("change", async () => {
+  try {
+    externalEditReferenceImages = await filesToPayload(
+      Array.from(externalEditReferenceImagesInputEl.files || []),
+      "edit references"
+    );
+    renderSummary(
+      externalEditReferenceSummaryEl,
+      externalEditReferenceImages,
+      "No edit references selected.",
+      "Using edit references "
+    );
+  } catch (error) {
+    externalEditReferenceImages = [];
+    externalEditReferenceImagesInputEl.value = "";
+    renderSummary(
+      externalEditReferenceSummaryEl,
+      externalEditReferenceImages,
+      "No edit references selected.",
+      "Using edit references "
+    );
+    setStatus("Error: " + (error?.message || "Invalid edit reference"), "edit");
+  }
+});
+clearExternalEditReferencesBtn.addEventListener("click", () => {
+  externalEditReferenceImages = [];
+  externalEditReferenceImagesInputEl.value = "";
+  renderSummary(
+    externalEditReferenceSummaryEl,
+    externalEditReferenceImages,
+    "No edit references selected.",
+    "Using edit references "
+  );
 });
 
 loadSettings();
-renderReferenceSummary();
-renderEditReferenceSummary();
-setEditUIVisible(false);
-await loadHistory();
+previousQualityValue = qualityEl.value;
+loadUserApiKey();
+switchTab("create");
+updateSelectedGeneratedInfo(null);
+renderSummary(referenceSummaryEl, [], "No reference images selected.", "Using reference images ");
+renderSummary(
+  quickEditReferenceSummaryEl,
+  [],
+  "No edit guidance images selected.",
+  "Using edit guidance images "
+);
+renderSummary(
+  externalEditReferenceSummaryEl,
+  [],
+  "No edit references selected.",
+  "Using edit references "
+);
+await loadHistoriesFromDB();
