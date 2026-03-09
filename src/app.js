@@ -4,6 +4,7 @@ import apiRouter from "./routes/api.js";
 
 export function createApp() {
   const app = express();
+  app.set("trust proxy", 1);
 
   app.use(express.json({ limit: "30mb" }));
   app.use("/images", express.static(path.resolve(process.cwd(), "images")));

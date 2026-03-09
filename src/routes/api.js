@@ -37,10 +37,36 @@ function validateRenderSettings({ size, quality, output_format, output_compressi
   }
 }
 
-function getClientIp(req) {
-  const raw = req.ip || req.socket?.remoteAddress || "unknown";
+function normalizeIp(raw) {
   if (typeof raw !== "string") return "unknown";
-  return raw.startsWith("::ffff:") ? raw.slice(7) : raw;
+  const trimmed = raw.trim();
+  if (!trimmed) return "unknown";
+
+  // X-Forwarded-For may contain multiple IPs: client, proxy1, proxy2...
+  const first = trimmed.split(",")[0]?.trim() || "";
+  if (!first) return "unknown";
+
+  if (first.startsWith("::ffff:")) {
+    return first.slice(7);
+  }
+  if (first === "::1") {
+    return "127.0.0.1";
+  }
+  return first;
+}
+
+function getClientIp(req) {
+  const xForwardedFor = req.get("x-forwarded-for");
+  if (xForwardedFor) {
+    return normalizeIp(xForwardedFor);
+  }
+
+  const xRealIp = req.get("x-real-ip");
+  if (xRealIp) {
+    return normalizeIp(xRealIp);
+  }
+
+  return normalizeIp(req.ip || req.socket?.remoteAddress || "unknown");
 }
 
 function getClientUserAgent(req) {
