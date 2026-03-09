@@ -119,6 +119,24 @@ export async function initializeRequestLogStore() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
       `);
 
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS shared_images (
+          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+          share_id VARCHAR(32) NOT NULL,
+          content_hash VARCHAR(64) NOT NULL,
+          creator_ip VARCHAR(45) NULL,
+          mime_type VARCHAR(32) NOT NULL,
+          image_b64 LONGTEXT NOT NULL,
+          prompt_text TEXT NULL,
+          source_tab VARCHAR(16) NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          UNIQUE KEY uq_share_id (share_id),
+          UNIQUE KEY uq_content_hash (content_hash),
+          KEY idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+      `);
+
       // Backfill for existing installations created before these columns.
       if (!(await hasColumn(db, "request_logs", "key_source"))) {
         await db.query(
@@ -133,6 +151,11 @@ export async function initializeRequestLogStore() {
       if (!(await hasColumn(db, "request_logs", "api_key_id"))) {
         await db.query(
           "ALTER TABLE request_logs ADD COLUMN api_key_id BIGINT UNSIGNED NULL"
+        );
+      }
+      if (!(await hasColumn(db, "shared_images", "creator_ip"))) {
+        await db.query(
+          "ALTER TABLE shared_images ADD COLUMN creator_ip VARCHAR(45) NULL AFTER content_hash"
         );
       }
     })();
@@ -280,4 +303,93 @@ export async function insertContactMessage({
       userAgent || null
     ]
   );
+}
+
+function createShareId() {
+  return crypto.randomBytes(8).toString("hex");
+}
+
+function getContentHash(imageB64) {
+  return crypto.createHash("sha256").update(String(imageB64 || "")).digest("hex");
+}
+
+export async function createOrGetSharedImage({
+  imageB64,
+  mimeType,
+  promptText,
+  sourceTab,
+  creatorIp
+}) {
+  const db = getPool();
+  const contentHash = getContentHash(imageB64);
+  const [existingRows] = await db.query(
+    `SELECT share_id, creator_ip, mime_type, image_b64, prompt_text, source_tab, created_at
+     FROM shared_images
+     WHERE content_hash = ?
+     LIMIT 1`,
+    [contentHash]
+  );
+
+  if (Array.isArray(existingRows) && existingRows.length > 0) {
+    return {
+      shareId: existingRows[0].share_id,
+      alreadyExisted: true
+    };
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const shareId = createShareId();
+    try {
+      await db.query(
+        `INSERT INTO shared_images
+          (share_id, content_hash, creator_ip, mime_type, image_b64, prompt_text, source_tab)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          shareId,
+          contentHash,
+          creatorIp || null,
+          mimeType,
+          imageB64,
+          promptText || null,
+          sourceTab || null
+        ]
+      );
+      return {
+        shareId,
+        alreadyExisted: false
+      };
+    } catch (error) {
+      if (error?.code === "ER_DUP_ENTRY") {
+        const [rows] = await db.query(
+          `SELECT share_id
+           FROM shared_images
+           WHERE content_hash = ?
+           LIMIT 1`,
+          [contentHash]
+        );
+        if (Array.isArray(rows) && rows.length > 0) {
+          return {
+            shareId: rows[0].share_id,
+            alreadyExisted: true
+          };
+        }
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error("Failed to create shared image");
+}
+
+export async function getSharedImageByShareId(shareId) {
+  const db = getPool();
+  const [rows] = await db.query(
+    `SELECT share_id, creator_ip, mime_type, image_b64, prompt_text, source_tab, created_at
+     FROM shared_images
+     WHERE share_id = ?
+     LIMIT 1`,
+    [shareId]
+  );
+  return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
 }

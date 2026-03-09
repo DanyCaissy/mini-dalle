@@ -16,7 +16,6 @@ const externalEditPromptEl = document.getElementById("externalEditPrompt");
 const sizeEl = document.getElementById("size");
 const qualityEl = document.getElementById("quality");
 const formatEl = document.getElementById("format");
-const compressionEl = document.getElementById("compression");
 const toggleApiKeyPanelBtn = document.getElementById("toggleApiKeyPanel");
 const apiKeyPanelBodyEl = document.getElementById("apiKeyPanelBody");
 const userApiKeyEl = document.getElementById("userApiKey");
@@ -37,6 +36,7 @@ const referenceSummaryEl = document.getElementById("referenceSummary");
 const quickEditReferenceImagesInputEl = document.getElementById("quickEditReferenceImages");
 const clearQuickEditReferencesBtn = document.getElementById("clearQuickEditReferences");
 const quickEditReferenceSummaryEl = document.getElementById("quickEditReferenceSummary");
+const quickShareBtn = document.getElementById("quickShare");
 
 const externalSourceImageInputEl = document.getElementById("externalSourceImage");
 const clearExternalSourceImageBtn = document.getElementById("clearExternalSourceImage");
@@ -53,6 +53,7 @@ const editResultReferenceImagesInputEl = document.getElementById("editResultRefe
 const clearEditResultReferencesBtn = document.getElementById("clearEditResultReferences");
 const editResultReferenceSummaryEl = document.getElementById("editResultReferenceSummary");
 const editResultVariationBtn = document.getElementById("editResultVariation");
+const editResultShareBtn = document.getElementById("editResultShare");
 const editResultDownloadEl = document.getElementById("editResultDownload");
 
 const quickEditCardEl = document.getElementById("quickEditCard");
@@ -211,15 +212,17 @@ function switchTab(mode) {
 function setButtons(disabled) {
   generateBtn.disabled = disabled;
   quickEditBtn.disabled = disabled;
+  quickShareBtn.disabled = disabled;
   externalEditBtn.disabled = disabled;
   editResultVariationBtn.disabled = disabled;
+  editResultShareBtn.disabled = disabled;
 }
 
 function getSelectedRenderSettings() {
   const size = sizeEl.value;
   const quality = qualityEl.value;
   const output_format = formatEl.value;
-  const output_compression = Number.parseInt(compressionEl.value, 10);
+  const output_compression = 100;
 
   const allowedSizes = new Set(["1024x1024", "1024x1536", "1536x1024"]);
   const allowedQualities = new Set(["low", "medium", "high"]);
@@ -239,8 +242,7 @@ function saveSettings() {
   const payload = {
     size: sizeEl.value,
     quality: qualityEl.value,
-    output_format: formatEl.value,
-    output_compression: compressionEl.value
+    output_format: formatEl.value
   };
   localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
 }
@@ -353,9 +355,6 @@ function loadSettings() {
     if (typeof parsed.size === "string") sizeEl.value = parsed.size;
     if (typeof parsed.quality === "string") qualityEl.value = parsed.quality;
     if (typeof parsed.output_format === "string") formatEl.value = parsed.output_format;
-    if (parsed.output_compression !== undefined && parsed.output_compression !== null) {
-      compressionEl.value = String(parsed.output_compression);
-    }
   } catch {
     localStorage.removeItem(SETTINGS_STORAGE_KEY);
   }
@@ -591,6 +590,47 @@ async function requestJSON(path, payload, method = "POST") {
     throw error;
   }
   return data;
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+  return false;
+}
+
+async function shareHistoryImage(item, sourceTab, statusEl) {
+  if (!item) {
+    statusEl.textContent = "Select an image first.";
+    return;
+  }
+
+  statusEl.textContent = "Creating share link...";
+  try {
+    const data = await requestJSON("/api/share", {
+      image_b64: item.b64,
+      image_mime_type: item.mimeType,
+      prompt_text: item.originPrompt || "",
+      source_tab: sourceTab
+    });
+
+    const copied = await copyTextToClipboard(data.share_url).catch(() => false);
+    window.open(data.share_url, "_blank", "noopener,noreferrer");
+    statusEl.textContent = data.already_existed
+      ? (copied
+        ? "This image was already shared. Existing link copied to clipboard."
+        : "This image was already shared. Reused existing share link.")
+      : (copied
+        ? "Share link created and copied to clipboard."
+        : "Share link created.");
+
+    if (!copied) {
+      window.prompt("Copy this share link:", data.share_url);
+    }
+  } catch (error) {
+    statusEl.textContent = "Error: " + (error?.message || "Failed to create share link");
+  }
 }
 
 function openPaywallModal(message, reasonEventType) {
@@ -863,19 +903,34 @@ async function editSelectedResultVariation() {
   }
 }
 
+async function shareSelectedCreateImage() {
+  const item = createHistory.find((entry) => String(entry.id) === String(selectedCreateId));
+  await shareHistoryImage(item, "create", quickEditStatusEl);
+}
+
+async function shareSelectedEditImage() {
+  const item = editHistory.find((entry) => String(entry.id) === String(selectedEditId));
+  await shareHistoryImage(item, "edit", editResultStatusEl);
+}
+
 tabCreateEl.addEventListener("click", () => switchTab("create"));
 tabEditEl.addEventListener("click", () => switchTab("edit"));
 
 generateBtn.addEventListener("click", generateImage);
 quickEditBtn.addEventListener("click", quickEditGeneratedImage);
+quickShareBtn.addEventListener("click", () => {
+  void shareSelectedCreateImage();
+});
 externalEditBtn.addEventListener("click", editUploadedImage);
 editResultVariationBtn.addEventListener("click", editSelectedResultVariation);
+editResultShareBtn.addEventListener("click", () => {
+  void shareSelectedEditImage();
+});
 clearCreateHistoryBtn.addEventListener("click", () => void clearCreateHistory());
 clearEditHistoryBtn.addEventListener("click", () => void clearEditHistory());
 
 sizeEl.addEventListener("change", saveSettings);
 formatEl.addEventListener("change", saveSettings);
-compressionEl.addEventListener("change", saveSettings);
 qualityEl.addEventListener("change", () => {
   const selected = qualityEl.value;
   if (selected === "high" && !canUseHighQuality()) {

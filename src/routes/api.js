@@ -9,6 +9,7 @@ import { editImage, generateImage } from "../services/imageService.js";
 import {
   countContactMessagesByIpLastDay,
   countServerDefaultRequestsByIp,
+  createOrGetSharedImage,
   insertContactMessage,
   insertRequestLog,
   insertSubscriptionInterestEvent,
@@ -347,6 +348,41 @@ router.post("/contact", async (req, res) => {
   } catch (error) {
     console.error("Contact submit failed:", error);
     res.status(500).json({ error: "Failed to submit contact message" });
+  }
+});
+
+router.post("/share", async (req, res) => {
+  try {
+    const imageB64 = typeof req.body?.image_b64 === "string" ? req.body.image_b64.trim() : "";
+    const mimeType = typeof req.body?.image_mime_type === "string" ? req.body.image_mime_type.trim() : "";
+    const promptText = typeof req.body?.prompt_text === "string" ? req.body.prompt_text.trim() : "";
+    const sourceTab = typeof req.body?.source_tab === "string" ? req.body.source_tab.trim() : "";
+
+    if (!imageB64) {
+      return res.status(400).json({ error: "Missing shared image data." });
+    }
+    if (!["image/png", "image/jpeg"].includes(mimeType)) {
+      return res.status(400).json({ error: "Unsupported shared image type." });
+    }
+
+    const shared = await createOrGetSharedImage({
+      imageB64,
+      mimeType,
+      promptText,
+      sourceTab,
+      creatorIp: getClientIp(req)
+    });
+    const shareUrl = `${req.protocol}://${req.get("host")}/shared/${shared.shareId}`;
+
+    res.json({
+      ok: true,
+      share_id: shared.shareId,
+      share_url: shareUrl,
+      already_existed: shared.alreadyExisted
+    });
+  } catch (error) {
+    console.error("Share create failed:", error);
+    res.status(500).json({ error: "Failed to create share link" });
   }
 });
 

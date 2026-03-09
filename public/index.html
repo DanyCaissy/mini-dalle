@@ -12,12 +12,12 @@
 <body>
   <main class="wrap">
     <div class="brand">
-      <div class="brand-main">
+      <a class="brand-main" href="/" aria-label="Go to Dall-E Goblin home page">
         <div class="logo" aria-hidden="true">
           <img src="/images/goblin-profile-right.png" alt="Dall-E Goblin logo" />
         </div>
         <h1>Dall-E Goblin</h1>
-      </div>
+      </a>
       <button id="openContactModal" class="secondary" type="button">Contact</button>
     </div>
     <p>Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and image-guided transformations with reference images. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download versions. You get 2 free requests, then you can add your own OpenAI API key to continue.</p>
@@ -67,10 +67,6 @@
             <option value="png">PNG (larger)</option>
           </select>
         </div>
-        <div class="settings-field settings-field-small">
-          <label for="compression">Compression</label>
-          <input id="compression" type="number" min="0" max="100" step="1" value="80" />
-        </div>
       </div>
     </section>
 
@@ -111,6 +107,7 @@
         <div class="hint" id="quickEditReferenceSummary"></div>
         <div class="row">
           <button id="quickEdit" type="button">Create Variation</button>
+          <button id="quickShare" class="secondary" type="button">Share Selected</button>
           <a id="quickDownload" class="download" href="#" download="dall-e-goblin-image.png">Download Selected</a>
         </div>
         <div class="status inline" id="quickEditStatus"></div>
@@ -162,6 +159,7 @@
         <div class="hint" id="editResultReferenceSummary"></div>
         <div class="row">
           <button id="editResultVariation" type="button">Create Variation</button>
+          <button id="editResultShare" class="secondary" type="button">Share Selected</button>
           <a id="editResultDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Selected</a>
         </div>
         <div class="status inline" id="editResultStatus"></div>
@@ -174,7 +172,7 @@
     </section>
 
     <div class="hint">Supported sizes: 1024x1024, 1024x1536, 1536x1024.</div>
-    <div class="hint">Compression applies to JPEG only. Your size/quality/format/compression selections are saved automatically.</div>
+    <div class="hint">Your size, quality, and format selections are saved automatically.</div>
 
     <footer class="footer-note">
       Dall-E Goblin is an independent tool and is not affiliated with, endorsed by, or sponsored by OpenAI. DALL·E is a trademark of OpenAI.
