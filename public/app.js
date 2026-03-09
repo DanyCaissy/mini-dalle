@@ -1,4 +1,4 @@
-const MAX_IMAGES_PER_TAB = 10;
+const MAX_IMAGES_PER_TAB = 30;
 const DB_NAME = "dalle-goblin";
 const DB_VERSION = 1;
 const CREATE_STORE = "create_history";
@@ -62,11 +62,13 @@ const quickEditStatusEl = document.getElementById("quickEditStatus");
 const createStatusEl = document.getElementById("createStatus");
 const editStatusEl = document.getElementById("editStatus");
 const createPreviewCanvasEl = document.getElementById("createPreviewCanvas");
+const createPreviewActionsEl = document.getElementById("createPreviewActions");
 const previewEl = document.getElementById("preview");
 const editResultSectionEl = document.getElementById("editResultSection");
 const selectedEditInfoEl = document.getElementById("selectedEditInfo");
 const editResultStatusEl = document.getElementById("editResultStatus");
 const editResultCanvasEl = document.getElementById("editResultCanvas");
+const editResultActionsEl = document.getElementById("editResultActions");
 const createHistoryEl = document.getElementById("createHistory");
 const editHistoryEl = document.getElementById("editHistory");
 const createHistoryCountEl = document.getElementById("createHistoryCount");
@@ -121,12 +123,29 @@ function activeStatusScope() {
   return editPanelEl.style.display === "none" ? "create" : "edit";
 }
 
+function getStatusKind(message) {
+  if (!message) return "";
+  if (message.startsWith("Error:")) return "error";
+  if (/(created|saved|copied|cleared|sent|reused|thanks)/i.test(message)) return "success";
+  if (/(generating|editing|creating|sending)/i.test(message)) return "loading";
+  return "";
+}
+
+function applyStatusState(element, message) {
+  element.textContent = message;
+  element.classList.remove("status-loading", "status-success", "status-error");
+  const kind = getStatusKind(message);
+  if (kind) {
+    element.classList.add("status-" + kind);
+  }
+}
+
 function setStatus(message, scope = "auto") {
   const resolvedScope = scope === "auto" ? activeStatusScope() : scope;
   if (resolvedScope === "edit") {
-    editStatusEl.textContent = message;
+    applyStatusState(editStatusEl, message);
   } else {
-    createStatusEl.textContent = message;
+    applyStatusState(createStatusEl, message);
   }
 }
 
@@ -366,6 +385,21 @@ function getFileExtensionFromMimeType(mimeType) {
   return "bin";
 }
 
+function buildDownloadBaseName(promptText, fallbackBaseName) {
+  const normalized = String(promptText || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+
+  if (!normalized) {
+    return fallbackBaseName;
+  }
+
+  const maxLength = 48;
+  return normalized.slice(0, maxLength).replace(/-+$/g, "") || fallbackBaseName;
+}
+
 function setDownloadLink(anchorEl, b64, mimeType, baseName) {
   const dataUrl = "data:" + mimeType + ";base64," + b64;
   anchorEl.href = dataUrl;
@@ -376,7 +410,7 @@ function setDownloadLink(anchorEl, b64, mimeType, baseName) {
 function updateSelectedGeneratedInfo(item) {
   if (!item) {
     selectedGeneratedInfoEl.textContent = "No generated image selected.";
-    quickEditStatusEl.textContent = "";
+    applyStatusState(quickEditStatusEl, "");
     quickEditCardEl.style.display = "none";
     return;
   }
@@ -411,7 +445,9 @@ function renderCounter(counterEl, count) {
 
 function renderHistoryList(containerEl, items, onSelect, onDelete, selectedId) {
   containerEl.innerHTML = "";
-  for (const item of items) {
+  const orderedItems = [...items].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  for (const item of orderedItems) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "thumb";
@@ -422,6 +458,13 @@ function renderHistoryList(containerEl, items, onSelect, onDelete, selectedId) {
     img.alt = "Thumbnail";
     img.src = "data:" + item.mimeType + ";base64," + item.b64;
     button.appendChild(img);
+
+    if (String(item.id) === String(selectedId)) {
+      const badge = document.createElement("div");
+      badge.className = "thumb-badge";
+      badge.textContent = "Selected";
+      button.appendChild(badge);
+    }
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -447,14 +490,21 @@ function selectCreateImage(id) {
     previewEl.removeAttribute("src");
     previewEl.style.display = "none";
     createPreviewCanvasEl.classList.add("hidden");
+    createPreviewActionsEl.classList.add("hidden");
     quickDownloadEl.style.display = "none";
     updateSelectedGeneratedInfo(null);
     return;
   }
   createPreviewCanvasEl.classList.remove("hidden");
+  createPreviewActionsEl.classList.remove("hidden");
   previewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   previewEl.style.display = "block";
-  setDownloadLink(quickDownloadEl, item.b64, item.mimeType, "dall-e-goblin-image");
+  setDownloadLink(
+    quickDownloadEl,
+    item.b64,
+    item.mimeType,
+    buildDownloadBaseName(item.originPrompt, "dall-e-goblin-image")
+  );
   updateSelectedGeneratedInfo(item);
   renderHistoryList(createHistoryEl, createHistory, selectCreateImage, deleteCreateImage, selectedCreateId);
 }
@@ -466,20 +516,32 @@ function selectEditImage(id) {
     externalResultPreviewEl.removeAttribute("src");
     externalResultPreviewEl.style.display = "none";
     editResultCanvasEl.classList.add("hidden");
+    editResultActionsEl.classList.add("hidden");
     editResultSectionEl.classList.add("hidden");
     externalDownloadEl.style.display = "none";
     editResultDownloadEl.style.display = "none";
     selectedEditInfoEl.textContent = "No edited image selected.";
-    editResultStatusEl.textContent = "";
+    applyStatusState(editResultStatusEl, "");
     return;
   }
   editResultCanvasEl.classList.remove("hidden");
+  editResultActionsEl.classList.remove("hidden");
   editResultSectionEl.classList.remove("hidden");
   selectedEditInfoEl.textContent = "Selected image: " + (item.originPrompt || "Edited image").slice(0, 90);
   externalResultPreviewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   externalResultPreviewEl.style.display = "block";
-  setDownloadLink(externalDownloadEl, item.b64, item.mimeType, "dall-e-goblin-edit");
-  setDownloadLink(editResultDownloadEl, item.b64, item.mimeType, "dall-e-goblin-edit");
+  setDownloadLink(
+    externalDownloadEl,
+    item.b64,
+    item.mimeType,
+    buildDownloadBaseName(item.originPrompt, "dall-e-goblin-edit")
+  );
+  setDownloadLink(
+    editResultDownloadEl,
+    item.b64,
+    item.mimeType,
+    buildDownloadBaseName(item.originPrompt, "dall-e-goblin-edit")
+  );
   renderHistoryList(editHistoryEl, editHistory, selectEditImage, deleteEditImage, selectedEditId);
 }
 
@@ -602,11 +664,11 @@ async function copyTextToClipboard(text) {
 
 async function shareHistoryImage(item, sourceTab, statusEl) {
   if (!item) {
-    statusEl.textContent = "Select an image first.";
+    applyStatusState(statusEl, "Error: Select an image first.");
     return;
   }
 
-  statusEl.textContent = "Creating share link...";
+  applyStatusState(statusEl, "Creating share link...");
   try {
     const data = await requestJSON("/api/share", {
       image_b64: item.b64,
@@ -617,19 +679,19 @@ async function shareHistoryImage(item, sourceTab, statusEl) {
 
     const copied = await copyTextToClipboard(data.share_url).catch(() => false);
     window.open(data.share_url, "_blank", "noopener,noreferrer");
-    statusEl.textContent = data.already_existed
+    applyStatusState(statusEl, data.already_existed
       ? (copied
         ? "This image was already shared. Existing link copied to clipboard."
         : "This image was already shared. Reused existing share link.")
       : (copied
         ? "Share link created and copied to clipboard."
-        : "Share link created.");
+        : "Share link created."));
 
     if (!copied) {
       window.prompt("Copy this share link:", data.share_url);
     }
   } catch (error) {
-    statusEl.textContent = "Error: " + (error?.message || "Failed to create share link");
+    applyStatusState(statusEl, "Error: " + (error?.message || "Failed to create share link"));
   }
 }
 
@@ -727,15 +789,15 @@ async function quickEditGeneratedImage() {
   const base = createHistory.find((entry) => String(entry.id) === String(selectedCreateId));
 
   if (!base) {
-    quickEditStatusEl.textContent = "Select a generated image first.";
+    applyStatusState(quickEditStatusEl, "Error: Select a generated image first.");
     return;
   }
   if (!prompt) {
-    quickEditStatusEl.textContent = "Please enter a quick edit prompt.";
+    applyStatusState(quickEditStatusEl, "Error: Please enter a quick edit prompt.");
     return;
   }
   if (!settings) {
-    quickEditStatusEl.textContent = error;
+    applyStatusState(quickEditStatusEl, "Error: " + error);
     return;
   }
   if (!canUseHighQuality() && settings.quality === "high") {
@@ -748,7 +810,7 @@ async function quickEditGeneratedImage() {
 
   saveSettings();
   setButtons(true);
-  quickEditStatusEl.textContent = "Creating variation...";
+  applyStatusState(quickEditStatusEl, "Creating variation...");
 
   try {
     const payload = {
@@ -766,7 +828,7 @@ async function quickEditGeneratedImage() {
     const mimeType = data.mime_type || "image/png";
     const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: base.id });
     await addCreateHistoryItem(entry);
-    quickEditStatusEl.textContent = "Variation created. (" + createHistory.length + "/" + MAX_IMAGES_PER_TAB + ")";
+    applyStatusState(quickEditStatusEl, "Variation created. (" + createHistory.length + "/" + MAX_IMAGES_PER_TAB + ")");
   } catch (requestError) {
     if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
       openPaywallModal(
@@ -779,7 +841,7 @@ async function quickEditGeneratedImage() {
       ensureApiKeyPanelOpen();
       userApiKeyEl.focus();
     }
-    quickEditStatusEl.textContent = "Error: " + (requestError?.message || "Unknown error");
+    applyStatusState(quickEditStatusEl, "Error: " + (requestError?.message || "Unknown error"));
   } finally {
     setButtons(false);
   }
@@ -845,15 +907,15 @@ async function editSelectedResultVariation() {
   const base = editHistory.find((entry) => String(entry.id) === String(selectedEditId));
 
   if (!base) {
-    editResultStatusEl.textContent = "Select an edited image first.";
+    applyStatusState(editResultStatusEl, "Error: Select an edited image first.");
     return;
   }
   if (!prompt) {
-    editResultStatusEl.textContent = "Please enter a variation prompt.";
+    applyStatusState(editResultStatusEl, "Error: Please enter a variation prompt.");
     return;
   }
   if (!settings) {
-    editResultStatusEl.textContent = error;
+    applyStatusState(editResultStatusEl, "Error: " + error);
     return;
   }
   if (!canUseHighQuality() && settings.quality === "high") {
@@ -866,7 +928,7 @@ async function editSelectedResultVariation() {
 
   saveSettings();
   setButtons(true);
-  editResultStatusEl.textContent = "Creating variation...";
+  applyStatusState(editResultStatusEl, "Creating variation...");
 
   try {
     const payload = {
@@ -884,7 +946,7 @@ async function editSelectedResultVariation() {
     const mimeType = data.mime_type || "image/png";
     const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: base.id });
     await addEditHistoryItem(entry);
-    editResultStatusEl.textContent = "Variation created. (" + editHistory.length + "/" + MAX_IMAGES_PER_TAB + ")";
+    applyStatusState(editResultStatusEl, "Variation created. (" + editHistory.length + "/" + MAX_IMAGES_PER_TAB + ")");
   } catch (requestError) {
     if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
       openPaywallModal(
@@ -897,7 +959,7 @@ async function editSelectedResultVariation() {
       ensureApiKeyPanelOpen();
       userApiKeyEl.focus();
     }
-    editResultStatusEl.textContent = "Error: " + (requestError?.message || "Unknown error");
+    applyStatusState(editResultStatusEl, "Error: " + (requestError?.message || "Unknown error"));
   } finally {
     setButtons(false);
   }
@@ -1226,7 +1288,7 @@ editResultReferenceImagesInputEl.addEventListener("change", async () => {
       "",
       "Using reference images "
     );
-    editResultStatusEl.textContent = "Error: " + (error?.message || "Invalid edit reference");
+    applyStatusState(editResultStatusEl, "Error: " + (error?.message || "Invalid edit reference"));
   }
 });
 clearEditResultReferencesBtn.addEventListener("click", () => {

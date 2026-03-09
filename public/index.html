@@ -94,6 +94,10 @@
       <div id="createPreviewCanvas" class="canvas hidden">
         <img id="preview" alt="Selected generated image preview" />
       </div>
+      <div id="createPreviewActions" class="row hidden">
+        <button id="quickShare" class="secondary" type="button">Share Selected</button>
+        <a id="quickDownload" class="download" href="#" download="dall-e-goblin-image.png">Download Selected</a>
+      </div>
       <div id="quickEditCard" class="panel quick-edit" style="display:none">
         <div class="quick-edit-kicker">Next Step: Refine This Image</div>
         <h2>Edit Selected Result</h2>
@@ -105,10 +109,8 @@
           <button id="clearQuickEditReferences" class="secondary" type="button">Clear reference images</button>
         </div>
         <div class="hint" id="quickEditReferenceSummary"></div>
-        <div class="row">
+        <div class="row action-row">
           <button id="quickEdit" type="button">Create Variation</button>
-          <button id="quickShare" class="secondary" type="button">Share Selected</button>
-          <a id="quickDownload" class="download" href="#" download="dall-e-goblin-image.png">Download Selected</a>
         </div>
         <div class="status inline" id="quickEditStatus"></div>
       </div>
@@ -146,6 +148,10 @@
       <div id="editResultCanvas" class="canvas hidden">
         <img id="externalResultPreview" alt="Edited uploaded image preview" />
       </div>
+      <div id="editResultActions" class="row hidden">
+        <button id="editResultShare" class="secondary" type="button">Share Selected</button>
+        <a id="editResultDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Selected</a>
+      </div>
       <div id="editResultSection" class="panel quick-edit hidden">
         <div class="quick-edit-kicker">Next Step: Refine This Image</div>
         <h2>Edit Selected Result</h2>
@@ -157,10 +163,8 @@
           <button id="clearEditResultReferences" class="secondary" type="button">Clear reference images</button>
         </div>
         <div class="hint" id="editResultReferenceSummary"></div>
-        <div class="row">
+        <div class="row action-row">
           <button id="editResultVariation" type="button">Create Variation</button>
-          <button id="editResultShare" class="secondary" type="button">Share Selected</button>
-          <a id="editResultDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Selected</a>
         </div>
         <div class="status inline" id="editResultStatus"></div>
       </div>

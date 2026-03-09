@@ -16,6 +16,10 @@ function renderSharedImagePage(sharedImage) {
   const promptText = sharedImage?.prompt_text ? escapeHtml(sharedImage.prompt_text) : "";
   const title = promptText ? `${promptText} | Dall-E Goblin` : "Shared Image | Dall-E Goblin";
   const imageSrc = `data:${sharedImage.mime_type};base64,${sharedImage.image_b64}`;
+  const extension = sharedImage.mime_type === "image/jpeg" ? "jpg" : "png";
+  const downloadName = promptText
+    ? promptText.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "shared-image"
+    : "shared-image";
 
   return `<!doctype html>
 <html lang="en">
@@ -24,6 +28,8 @@ function renderSharedImagePage(sharedImage) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="Shared AI image from Dall-E Goblin. Generate and edit your own images with reference images and optional bring-your-own OpenAI API key support." />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/favicon.png" />
   <style>
     :root {
       --bg: #f7f4ed;
@@ -51,15 +57,45 @@ function renderSharedImagePage(sharedImage) {
       margin: 0 auto;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 20px;
+      border-radius: 16px;
+      padding: 18px;
       box-shadow: 0 8px 28px rgba(0, 0, 0, 0.06);
     }
-    h1 { margin: 0 0 10px; font-size: clamp(28px, 5vw, 40px); }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(22px, 4vw, 32px);
+      line-height: 1.1;
+    }
     p { margin: 0 0 14px; color: var(--muted); line-height: 1.5; }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
     .brand-link {
+      display: flex;
+      align-items: center;
+      gap: 14px;
       color: inherit;
       text-decoration: none;
+    }
+    .logo {
+      width: 86px;
+      height: 86px;
+      border-radius: 18px;
+      border: 1px solid var(--border);
+      display: block;
+      background: radial-gradient(circle at 25% 20%, #fff5e6 0%, #f1e2cf 58%, #e3d2bc 100%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    .logo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
     .image-frame {
       margin-top: 18px;
@@ -93,9 +129,15 @@ function renderSharedImagePage(sharedImage) {
       padding-top: 18px;
       border-top: 1px solid var(--border);
     }
+    .image-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .action-link,
     .cta a {
       display: inline-block;
-      margin-top: 8px;
       padding: 12px 16px;
       border-radius: 12px;
       background: var(--accent);
@@ -103,16 +145,34 @@ function renderSharedImagePage(sharedImage) {
       text-decoration: none;
       font-weight: 600;
     }
+    .action-link.secondary {
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--border);
+    }
+    .cta a {
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
   <main class="wrap">
-    <a class="brand-link" href="/"><h1>Dall-E Goblin</h1></a>
-    <p>Shared image created with Dall-E Goblin.</p>
+    <div class="brand">
+      <a class="brand-link" href="/">
+        <div class="logo" aria-hidden="true">
+          <img src="/images/goblin-profile-right.png" alt="Dall-E Goblin logo" />
+        </div>
+        <h1>Dall-E Goblin</h1>
+      </a>
+    </div>
+    <p>Image shared with the following prompt:</p>
+    ${promptText ? `<div class="prompt-card"><div class="prompt-label">Prompt</div><p>${promptText}</p></div>` : ""}
     <div class="image-frame">
       <img src="${imageSrc}" alt="Shared AI-generated image" />
     </div>
-    ${promptText ? `<div class="prompt-card"><div class="prompt-label">Prompt</div><p>${promptText}</p></div>` : ""}
+    <div class="image-actions">
+      <a class="action-link secondary" href="${imageSrc}" download="${downloadName}.${extension}">Download Image</a>
+    </div>
     <div class="cta">
       <p>Want to generate or edit your own images with prompts, uploads, and reference images?</p>
       <a href="/">Create your own images</a>

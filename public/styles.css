@@ -110,10 +110,16 @@ textarea {
   margin-top: 12px;
 }
 
+.action-row {
+  margin-bottom: 0;
+}
+
 .tabs {
   display: flex;
-  gap: 10px;
-  margin: 10px 0 14px;
+  gap: 0;
+  margin: 10px 0 -1px;
+  position: relative;
+  z-index: 2;
 }
 
 .workspace-divider {
@@ -122,15 +128,32 @@ textarea {
 }
 
 .tab {
-  border-color: var(--border);
-  background: #fff;
-  color: var(--ink);
+  appearance: none;
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: #efe9de;
+  color: #5b5248;
+  padding: 10px 18px 11px;
+  font-weight: 600;
+  position: relative;
+  top: 1px;
 }
 
 .tab.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-ink);
+  border-color: var(--border);
+  background: #fffdfa;
+  color: var(--ink);
+  box-shadow: 0 -1px 0 rgba(255, 255, 255, 0.7) inset;
+  z-index: 3;
+}
+
+.tab:not(.active) {
+  border-bottom: 1px solid var(--border);
+}
+
+.tab + .tab {
+  margin-left: 6px;
 }
 
 .panel {
@@ -143,6 +166,8 @@ textarea {
 
 .tab-panel {
   background: #fffdfa;
+  margin-top: 0;
+  border-top-left-radius: 0;
 }
 
 .settings {
@@ -257,13 +282,36 @@ button:disabled {
 
 .status {
   margin-top: 12px;
-  min-height: 24px;
   color: var(--muted);
   font-size: 14px;
+  padding: 9px 11px;
+  border-radius: 10px;
 }
 
 .status.inline {
   margin-top: 6px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status-loading {
+  background: #f5efe3;
+  color: #6d5836;
+  border: 1px solid #e5d3af;
+}
+
+.status-success {
+  background: #ebf7f1;
+  color: #255d4c;
+  border: 1px solid #b9d8cd;
+}
+
+.status-error {
+  background: #fbeceb;
+  color: #8a2f2a;
+  border: 1px solid #e6bbb6;
 }
 
 .canvas {
@@ -302,16 +350,36 @@ button:disabled {
 
 .thumb {
   position: relative;
-  border: 2px solid transparent;
+  border: 2px solid #ddd3c7;
   border-radius: 10px;
   overflow: hidden;
   cursor: pointer;
   background: #fff;
   padding: 0;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.thumb:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
 }
 
 .thumb.active {
-  border-color: var(--accent);
+  border-color: #1f5c4d;
+  box-shadow: 0 0 0 3px rgba(47, 111, 95, 0.16);
+}
+
+.thumb-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(31, 92, 77, 0.92);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .thumb-delete {
@@ -345,6 +413,15 @@ button:disabled {
 .upload-input {
   max-width: 300px;
   background: #fff;
+}
+
+#createPreviewActions,
+#editResultActions {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #faf7f1;
 }
 
 .api-key-input {
