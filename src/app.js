@@ -26,11 +26,25 @@ function buildSafeDownloadName(promptText, fallbackBaseName) {
   return normalized.slice(0, 48).replace(/-+$/g, "") || fallbackBaseName;
 }
 
-function renderSharedImagePage(sharedImage) {
+function buildAbsoluteUrl(req, pathname) {
+  return `${req.protocol}://${req.get("host")}${pathname}`;
+}
+
+function buildShareMetaDescription(promptText) {
+  const base = promptText
+    ? `Image shared with the prompt: ${promptText}`
+    : "Shared AI image from Dall-E Goblin";
+  return `${base}. Generate and edit your own images with Dall-E Goblin.`;
+}
+
+function renderSharedImagePage(req, sharedImage) {
   const rawPromptText = sharedImage?.prompt_text || "";
   const promptText = rawPromptText ? escapeHtml(rawPromptText) : "";
   const title = promptText ? `${promptText} | Dall-E Goblin` : "Shared Image | Dall-E Goblin";
-  const imageSrc = `data:${sharedImage.mime_type};base64,${sharedImage.image_b64}`;
+  const pageUrl = buildAbsoluteUrl(req, `/shared/${sharedImage.share_id}`);
+  const imageUrl = buildAbsoluteUrl(req, `/shared/${sharedImage.share_id}/image`);
+  const imageSrc = imageUrl;
+  const metaDescription = escapeHtml(buildShareMetaDescription(rawPromptText));
 
   return `<!doctype html>
 <html lang="en">
@@ -38,7 +52,17 @@ function renderSharedImagePage(sharedImage) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
-  <meta name="description" content="Shared AI image from Dall-E Goblin. Generate and edit your own images with reference images and optional bring-your-own OpenAI API key support." />
+  <meta name="description" content="${metaDescription}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="${escapeHtml(title)}" />
+  <meta property="og:description" content="${metaDescription}" />
+  <meta property="og:url" content="${escapeHtml(pageUrl)}" />
+  <meta property="og:image" content="${escapeHtml(imageUrl)}" />
+  <meta property="og:site_name" content="Dall-E Goblin" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${escapeHtml(title)}" />
+  <meta name="twitter:description" content="${metaDescription}" />
+  <meta name="twitter:image" content="${escapeHtml(imageUrl)}" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/favicon.png" />
   <style>
@@ -211,9 +235,30 @@ export function createApp() {
       if (!sharedImage) {
         return res.status(404).send("Shared image not found");
       }
-      res.type("html").send(renderSharedImagePage(sharedImage));
+      res.type("html").send(renderSharedImagePage(req, sharedImage));
     } catch (error) {
       console.error("Shared image page failed:", error);
+      res.status(500).send("Failed to load shared image");
+    }
+  });
+
+  app.get("/shared/:shareId/image", async (req, res) => {
+    try {
+      const shareId = String(req.params?.shareId || "").trim();
+      if (!shareId) {
+        return res.status(404).send("Not found");
+      }
+      const sharedImage = await getSharedImageByShareId(shareId);
+      if (!sharedImage) {
+        return res.status(404).send("Shared image not found");
+      }
+
+      const imageBuffer = Buffer.from(sharedImage.image_b64, "base64");
+      res.setHeader("Content-Type", sharedImage.mime_type);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.send(imageBuffer);
+    } catch (error) {
+      console.error("Shared image file failed:", error);
       res.status(500).send("Failed to load shared image");
     }
   });
