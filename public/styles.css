@@ -138,10 +138,37 @@ textarea {
   background: #faf8f3;
 }
 
+.api-key-panel {
+  background: #f9f7f2;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.panel-toggle {
+  min-width: 84px;
+}
+
 .quick-edit {
   margin-top: 16px;
   border-color: #b9d8cd;
   background: #f4fbf7;
+}
+
+.quick-edit-kicker {
+  margin: 0 0 8px;
+  padding-top: 2px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #cfe3da;
+  color: #3f6d5f;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
 label {
@@ -168,6 +195,28 @@ input {
 
 input[type="number"] {
   width: 90px;
+}
+
+.settings-grid {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-field select,
+.settings-field input {
+  width: 100%;
+}
+
+.settings-field-small {
+  max-width: 140px;
 }
 
 button {
@@ -215,6 +264,10 @@ button:disabled {
   background: #fff;
   display: grid;
   place-items: center;
+}
+
+.canvas.hidden {
+  display: none;
 }
 
 .canvas.small {

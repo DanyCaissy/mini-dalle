@@ -17,6 +17,8 @@ const sizeEl = document.getElementById("size");
 const qualityEl = document.getElementById("quality");
 const formatEl = document.getElementById("format");
 const compressionEl = document.getElementById("compression");
+const toggleApiKeyPanelBtn = document.getElementById("toggleApiKeyPanel");
+const apiKeyPanelBodyEl = document.getElementById("apiKeyPanelBody");
 const userApiKeyEl = document.getElementById("userApiKey");
 const saveUserApiKeyBtn = document.getElementById("saveUserApiKey");
 const clearUserApiKeyBtn = document.getElementById("clearUserApiKey");
@@ -39,6 +41,7 @@ const quickEditReferenceSummaryEl = document.getElementById("quickEditReferenceS
 const externalSourceImageInputEl = document.getElementById("externalSourceImage");
 const clearExternalSourceImageBtn = document.getElementById("clearExternalSourceImage");
 const externalSourceSummaryEl = document.getElementById("externalSourceSummary");
+const externalPreviewCanvasEl = document.getElementById("externalPreviewCanvas");
 const externalPreviewEl = document.getElementById("externalPreview");
 
 const externalEditReferenceImagesInputEl = document.getElementById("externalEditReferenceImages");
@@ -48,9 +51,12 @@ const externalResultPreviewEl = document.getElementById("externalResultPreview")
 
 const quickEditCardEl = document.getElementById("quickEditCard");
 const selectedGeneratedInfoEl = document.getElementById("selectedGeneratedInfo");
+const quickEditStatusEl = document.getElementById("quickEditStatus");
 const createStatusEl = document.getElementById("createStatus");
 const editStatusEl = document.getElementById("editStatus");
+const createPreviewCanvasEl = document.getElementById("createPreviewCanvas");
 const previewEl = document.getElementById("preview");
+const editResultCanvasEl = document.getElementById("editResultCanvas");
 const createHistoryEl = document.getElementById("createHistory");
 const editHistoryEl = document.getElementById("editHistory");
 const createHistoryCountEl = document.getElementById("createHistoryCount");
@@ -96,6 +102,7 @@ let previousQualityValue = "low";
 
 const SETTINGS_STORAGE_KEY = "mini-dalle-settings-v1";
 const USER_API_KEY_STORAGE_KEY = "dalle-goblin-user-api-key";
+const API_KEY_PANEL_OPEN_STORAGE_KEY = "dalle-goblin-api-key-panel-open";
 
 let dbPromise = null;
 
@@ -241,6 +248,22 @@ function canUseHighQuality() {
   return isUsingOwnApiKey();
 }
 
+function setApiKeyPanelOpen(open) {
+  apiKeyPanelBodyEl.style.display = open ? "block" : "none";
+  toggleApiKeyPanelBtn.textContent = open ? "Hide" : "Show";
+  localStorage.setItem(API_KEY_PANEL_OPEN_STORAGE_KEY, open ? "1" : "0");
+}
+
+function isApiKeyPanelOpen() {
+  return apiKeyPanelBodyEl.style.display !== "none";
+}
+
+function ensureApiKeyPanelOpen() {
+  if (!isApiKeyPanelOpen()) {
+    setApiKeyPanelOpen(true);
+  }
+}
+
 function maskApiKey(key) {
   const normalized = String(key || "").trim();
   if (!normalized) return "";
@@ -307,6 +330,7 @@ function saveUserApiKeyFromInput() {
   isEditingSavedApiKey = false;
   setApiKeySavedState(true);
   updateApiKeyModeHint();
+  setApiKeyPanelOpen(false);
 }
 
 function loadSettings() {
@@ -341,6 +365,7 @@ function setDownloadLink(anchorEl, b64, mimeType, baseName) {
 function updateSelectedGeneratedInfo(item) {
   if (!item) {
     selectedGeneratedInfoEl.textContent = "No generated image selected.";
+    quickEditStatusEl.textContent = "";
     quickEditCardEl.style.display = "none";
     return;
   }
@@ -410,10 +435,12 @@ function selectCreateImage(id) {
   if (!item) {
     previewEl.removeAttribute("src");
     previewEl.style.display = "none";
+    createPreviewCanvasEl.classList.add("hidden");
     quickDownloadEl.style.display = "none";
     updateSelectedGeneratedInfo(null);
     return;
   }
+  createPreviewCanvasEl.classList.remove("hidden");
   previewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   previewEl.style.display = "block";
   setDownloadLink(quickDownloadEl, item.b64, item.mimeType, "dall-e-goblin-image");
@@ -427,9 +454,11 @@ function selectEditImage(id) {
   if (!item) {
     externalResultPreviewEl.removeAttribute("src");
     externalResultPreviewEl.style.display = "none";
+    editResultCanvasEl.classList.add("hidden");
     externalDownloadEl.style.display = "none";
     return;
   }
+  editResultCanvasEl.classList.remove("hidden");
   externalResultPreviewEl.src = "data:" + item.mimeType + ";base64," + item.b64;
   externalResultPreviewEl.style.display = "block";
   setDownloadLink(externalDownloadEl, item.b64, item.mimeType, "dall-e-goblin-edit");
@@ -624,6 +653,7 @@ async function generateImage() {
     }
     if (requestError?.code === "INVALID_USER_API_KEY") {
       alert("Your API key is invalid. Please update it.");
+      ensureApiKeyPanelOpen();
       userApiKeyEl.focus();
     }
     setStatus("Error: " + (requestError?.message || "Unknown error"), "create");
@@ -637,9 +667,18 @@ async function quickEditGeneratedImage() {
   const { settings, error } = getSelectedRenderSettings();
   const base = createHistory.find((entry) => String(entry.id) === String(selectedCreateId));
 
-  if (!base) return setStatus("Select a generated image first.", "create");
-  if (!prompt) return setStatus("Please enter a quick edit prompt.", "create");
-  if (!settings) return setStatus(error, "create");
+  if (!base) {
+    quickEditStatusEl.textContent = "Select a generated image first.";
+    return;
+  }
+  if (!prompt) {
+    quickEditStatusEl.textContent = "Please enter a quick edit prompt.";
+    return;
+  }
+  if (!settings) {
+    quickEditStatusEl.textContent = error;
+    return;
+  }
   if (!canUseHighQuality() && settings.quality === "high") {
     openPaywallModal(
       "High quality generation is available when you use your own API key or choose subscription.",
@@ -650,7 +689,7 @@ async function quickEditGeneratedImage() {
 
   saveSettings();
   setButtons(true);
-  setStatus("Creating variation...", "create");
+  quickEditStatusEl.textContent = "Creating variation...";
 
   try {
     const payload = {
@@ -668,7 +707,7 @@ async function quickEditGeneratedImage() {
     const mimeType = data.mime_type || "image/png";
     const entry = createHistoryEntry({ b64: data.b64, mimeType, prompt, parentId: base.id });
     await addCreateHistoryItem(entry);
-    setStatus("Variation created. (" + createHistory.length + "/" + MAX_IMAGES_PER_TAB + ")", "create");
+    quickEditStatusEl.textContent = "Variation created. (" + createHistory.length + "/" + MAX_IMAGES_PER_TAB + ")";
   } catch (requestError) {
     if (requestError?.code === "TRIAL_EXPIRED_NEEDS_API_KEY") {
       openPaywallModal(
@@ -678,9 +717,10 @@ async function quickEditGeneratedImage() {
     }
     if (requestError?.code === "INVALID_USER_API_KEY") {
       alert("Your API key is invalid. Please update it.");
+      ensureApiKeyPanelOpen();
       userApiKeyEl.focus();
     }
-    setStatus("Error: " + (requestError?.message || "Unknown error"), "create");
+    quickEditStatusEl.textContent = "Error: " + (requestError?.message || "Unknown error");
   } finally {
     setButtons(false);
   }
@@ -731,6 +771,7 @@ async function editUploadedImage() {
     }
     if (requestError?.code === "INVALID_USER_API_KEY") {
       alert("Your API key is invalid. Please update it.");
+      ensureApiKeyPanelOpen();
       userApiKeyEl.focus();
     }
     setStatus("Error: " + (requestError?.message || "Unknown error"), "edit");
@@ -768,7 +809,11 @@ qualityEl.addEventListener("change", () => {
 saveUserApiKeyBtn.addEventListener("click", () => {
   saveUserApiKeyFromInput();
 });
+toggleApiKeyPanelBtn.addEventListener("click", () => {
+  setApiKeyPanelOpen(!isApiKeyPanelOpen());
+});
 editUserApiKeyBtn.addEventListener("click", () => {
+  ensureApiKeyPanelOpen();
   isEditingSavedApiKey = true;
   userApiKeyEl.value = "";
   setApiKeySavedState(true);
@@ -789,6 +834,7 @@ paywallCloseEl.addEventListener("click", closePaywallModal);
 paywallUseOwnKeyEl.addEventListener("click", async () => {
   closePaywallModal();
   await requestJSON("/api/interest/event", { event_type: "paywall_clicked_use_own_key" }).catch(() => {});
+  ensureApiKeyPanelOpen();
   if (editUserApiKeyBtn.style.display !== "none") {
     editUserApiKeyBtn.click();
   } else {
@@ -919,7 +965,7 @@ quickEditReferenceImagesInputEl.addEventListener("change", async () => {
     renderSummary(
       quickEditReferenceSummaryEl,
       quickEditReferenceImages,
-      "No edit guidance images selected.",
+      "",
       "Using edit guidance images "
     );
   } catch (error) {
@@ -928,7 +974,7 @@ quickEditReferenceImagesInputEl.addEventListener("change", async () => {
     renderSummary(
       quickEditReferenceSummaryEl,
       quickEditReferenceImages,
-      "No edit guidance images selected.",
+      "",
       "Using edit guidance images "
     );
     setStatus("Error: " + (error?.message || "Invalid quick edit reference"), "create");
@@ -940,7 +986,7 @@ clearQuickEditReferencesBtn.addEventListener("click", () => {
   renderSummary(
     quickEditReferenceSummaryEl,
     quickEditReferenceImages,
-    "No edit guidance images selected.",
+    "",
     "Using edit guidance images "
   );
 });
@@ -950,6 +996,7 @@ externalSourceImageInputEl.addEventListener("change", async () => {
   if (!files.length) {
     externalSourceImage = null;
     externalPreviewEl.style.display = "none";
+    externalPreviewCanvasEl.classList.add("hidden");
     externalSourceSummaryEl.textContent = "No source image selected.";
     return;
   }
@@ -965,11 +1012,13 @@ externalSourceImageInputEl.addEventListener("change", async () => {
     };
     externalPreviewEl.src = "data:" + file.type + ";base64," + externalSourceImage.b64;
     externalPreviewEl.style.display = "block";
+    externalPreviewCanvasEl.classList.remove("hidden");
     externalSourceSummaryEl.textContent = "Source image: " + file.name;
   } catch (error) {
     externalSourceImage = null;
     externalSourceImageInputEl.value = "";
     externalPreviewEl.style.display = "none";
+    externalPreviewCanvasEl.classList.add("hidden");
     externalSourceSummaryEl.textContent = "No source image selected.";
     setStatus("Error: " + (error?.message || "Invalid source image"), "edit");
   }
@@ -978,6 +1027,7 @@ clearExternalSourceImageBtn.addEventListener("click", () => {
   externalSourceImage = null;
   externalSourceImageInputEl.value = "";
   externalPreviewEl.style.display = "none";
+  externalPreviewCanvasEl.classList.add("hidden");
   externalSourceSummaryEl.textContent = "No source image selected.";
 });
 
@@ -1019,13 +1069,14 @@ clearExternalEditReferencesBtn.addEventListener("click", () => {
 loadSettings();
 previousQualityValue = qualityEl.value;
 loadUserApiKey();
+setApiKeyPanelOpen(localStorage.getItem(API_KEY_PANEL_OPEN_STORAGE_KEY) === "1");
 switchTab("create");
 updateSelectedGeneratedInfo(null);
 renderSummary(referenceSummaryEl, [], "No reference images selected.", "Using reference images ");
 renderSummary(
   quickEditReferenceSummaryEl,
   [],
-  "No edit guidance images selected.",
+  "",
   "Using edit guidance images "
 );
 renderSummary(

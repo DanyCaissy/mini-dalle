@@ -20,45 +20,62 @@
       </div>
       <button id="openContactModal" class="secondary" type="button">Contact</button>
     </div>
-    <p>Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and fast variations. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download the versions you like. You get 2 free requests to try it, then you can add your own OpenAI API key to continue.</p>
+    <p>Dall-E Goblin is a DALL-E image generator and editor for text-to-image creation, uploaded image editing, and image-guided transformations with reference images. It keeps separate create/edit histories in your browser so you can revisit results, branch ideas, and download versions. You get 2 free requests, then you can add your own OpenAI API key to continue.</p>
 
     <div class="tabs" role="tablist" aria-label="Mode">
       <button id="tabCreate" class="tab active" type="button" role="tab" aria-selected="true">Create</button>
       <button id="tabEdit" class="tab" type="button" role="tab" aria-selected="false">Edit</button>
     </div>
 
+    <section class="panel api-key-panel">
+      <div class="panel-head">
+        <h2>API Key</h2>
+        <button id="toggleApiKeyPanel" class="secondary panel-toggle" type="button">Show</button>
+      </div>
+      <div id="apiKeyPanelBody" style="display:none">
+        <div class="row">
+          <label for="userApiKey">Your OpenAI API key:</label>
+          <input id="userApiKey" class="api-key-input" type="text" placeholder="sk-..." />
+          <button id="saveUserApiKey" class="secondary" type="button">Save key</button>
+          <button id="clearUserApiKey" class="secondary" type="button">Clear key</button>
+          <div id="savedApiKeyDisplay" class="saved-key" style="display:none"></div>
+          <button id="editUserApiKey" class="secondary" type="button" style="display:none">Edit key</button>
+        </div>
+        <div class="hint">Need your own key? Create one in your OpenAI dashboard: <a href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Get API key</a>.</div>
+        <div class="hint" id="apiKeyModeHint">Using free server key (2 requests available).</div>
+      </div>
+    </section>
+
     <section class="panel settings">
       <h2>Output Settings</h2>
-      <div class="row">
-        <label for="userApiKey">Your OpenAI API key:</label>
-        <input id="userApiKey" class="api-key-input" type="text" placeholder="sk-..." />
-        <button id="saveUserApiKey" class="secondary" type="button">Save key</button>
-        <button id="clearUserApiKey" class="secondary" type="button">Clear key</button>
-        <div id="savedApiKeyDisplay" class="saved-key" style="display:none"></div>
-        <button id="editUserApiKey" class="secondary" type="button" style="display:none">Edit key</button>
-      </div>
-      <div class="hint">Need your own key? Create one in your OpenAI dashboard: <a href="https://platform.openai.com/settings/organization/api-keys" target="_blank" rel="noopener noreferrer">Get API key</a>.</div>
-      <div class="hint" id="apiKeyModeHint">Using free server key (2 requests available).</div>
-      <div class="row">
-        <label for="size">Size:</label>
-        <select id="size">
-          <option value="1024x1024">1024x1024</option>
-          <option value="1024x1536">1024x1536 (portrait)</option>
-          <option value="1536x1024">1536x1024 (landscape)</option>
-        </select>
-        <label for="quality">Quality:</label>
-        <select id="quality">
-          <option value="low">Low (faster)</option>
-          <option value="medium">Medium</option>
-          <option value="high">High (slower)</option>
-        </select>
-        <label for="format">Format:</label>
-        <select id="format">
-          <option value="jpeg">JPEG (smaller/faster)</option>
-          <option value="png">PNG (larger)</option>
-        </select>
-        <label for="compression">Compression:</label>
-        <input id="compression" type="number" min="0" max="100" step="1" value="80" />
+      <div class="settings-grid">
+        <div class="settings-field">
+          <label for="size">Size</label>
+          <select id="size">
+            <option value="1024x1024">1024x1024</option>
+            <option value="1024x1536">1024x1536 (portrait)</option>
+            <option value="1536x1024">1536x1024 (landscape)</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="quality">Quality</label>
+          <select id="quality">
+            <option value="low">Low (faster)</option>
+            <option value="medium">Medium</option>
+            <option value="high">High (slower)</option>
+          </select>
+        </div>
+        <div class="settings-field">
+          <label for="format">Format</label>
+          <select id="format">
+            <option value="jpeg">JPEG (smaller/faster)</option>
+            <option value="png">PNG (larger)</option>
+          </select>
+        </div>
+        <div class="settings-field settings-field-small">
+          <label for="compression">Compression</label>
+          <input id="compression" type="number" min="0" max="100" step="1" value="80" />
+        </div>
       </div>
     </section>
 
@@ -68,7 +85,7 @@
       <div class="row">
         <label for="referenceImages">Reference images (optional):</label>
         <input id="referenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
-        <button id="clearReferences" class="secondary" type="button">Clear references</button>
+        <button id="clearReferences" class="secondary" type="button">Clear reference images</button>
       </div>
       <div class="hint" id="referenceSummary">No reference images selected.</div>
       <div class="row">
@@ -76,24 +93,25 @@
       </div>
       <div class="status inline" id="createStatus"></div>
 
+      <div id="createPreviewCanvas" class="canvas hidden">
+        <img id="preview" alt="Selected generated image preview" />
+      </div>
       <div id="quickEditCard" class="panel quick-edit" style="display:none">
-        <h2>Quick Edit Generated Image</h2>
+        <div class="quick-edit-kicker">Next Step: Refine This Image</div>
+        <h2>Edit Selected Result</h2>
         <div class="hint" id="selectedGeneratedInfo">No generated image selected.</div>
         <textarea id="quickEditPrompt" placeholder="Describe the changes you want while keeping the same composition/subject."></textarea>
         <div class="row">
-          <label for="quickEditReferenceImages">Edit guidance images (optional):</label>
+          <label for="quickEditReferenceImages">Reference images (optional):</label>
           <input id="quickEditReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
-          <button id="clearQuickEditReferences" class="secondary" type="button">Clear quick edit refs</button>
+          <button id="clearQuickEditReferences" class="secondary" type="button">Clear reference images</button>
         </div>
-        <div class="hint" id="quickEditReferenceSummary">No edit guidance images selected.</div>
+        <div class="hint" id="quickEditReferenceSummary"></div>
         <div class="row">
           <button id="quickEdit" type="button">Create Variation</button>
           <a id="quickDownload" class="download" href="#" download="dall-e-goblin-image.png">Download Selected</a>
         </div>
-      </div>
-
-      <div class="canvas">
-        <img id="preview" alt="Selected generated image preview" />
+        <div class="status inline" id="quickEditStatus"></div>
       </div>
       <div class="row">
         <div class="hint">Create history: <span id="createHistoryCount">0/10</span></div>
@@ -111,14 +129,14 @@
         <button id="clearExternalSourceImage" class="secondary" type="button">Clear source image</button>
       </div>
       <div class="hint" id="externalSourceSummary">No source image selected.</div>
-      <div class="canvas small">
+      <div id="externalPreviewCanvas" class="canvas small hidden">
         <img id="externalPreview" alt="External source image preview" />
       </div>
       <textarea id="externalEditPrompt" placeholder="Describe the edit to apply to your uploaded image."></textarea>
       <div class="row">
         <label for="externalEditReferenceImages">Edit references (optional):</label>
         <input id="externalEditReferenceImages" class="upload-input" type="file" accept="image/png,image/jpeg" multiple />
-        <button id="clearExternalEditReferences" class="secondary" type="button">Clear edit refs</button>
+        <button id="clearExternalEditReferences" class="secondary" type="button">Clear reference images</button>
       </div>
       <div class="hint" id="externalEditReferenceSummary">No edit references selected.</div>
         <div class="row">
@@ -126,7 +144,7 @@
           <a id="externalDownload" class="download" href="#" download="dall-e-goblin-edit.png">Download Result</a>
         </div>
       <div class="status inline" id="editStatus"></div>
-      <div class="canvas">
+      <div id="editResultCanvas" class="canvas hidden">
         <img id="externalResultPreview" alt="Edited uploaded image preview" />
       </div>
       <div class="row">
